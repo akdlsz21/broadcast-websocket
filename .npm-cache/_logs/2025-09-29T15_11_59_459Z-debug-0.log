@@ -1,0 +1,47 @@
+0 verbose cli /home/jihoon/.nvm/versions/node/v22.18.0/bin/node /home/jihoon/.nvm/versions/node/v22.18.0/bin/npm
+1 info using npm@10.9.3
+2 info using node@v22.18.0
+3 silly config load:file:/home/jihoon/.nvm/versions/node/v22.18.0/lib/node_modules/npm/npmrc
+4 silly config load:file:/home/jihoon/magic/broadcast-websocket/.npmrc
+5 silly config load:file:/home/jihoon/.npmrc
+6 silly config load:file:/home/jihoon/.nvm/versions/node/v22.18.0/etc/npmrc
+7 verbose title npm pack
+8 verbose argv "pack" "--dry-run" "--cache" "./.npm-cache"
+9 verbose logfile logs-max:10 dir:/home/jihoon/magic/broadcast-websocket/.npm-cache/_logs/2025-09-29T15_11_59_459Z-
+10 verbose logfile /home/jihoon/magic/broadcast-websocket/.npm-cache/_logs/2025-09-29T15_11_59_459Z-debug-0.log
+11 silly logfile done cleaning log files
+12 http fetch GET https://registry.npmjs.org/npm attempt 1 failed with EAI_AGAIN
+13 silly packumentCache heap:4345298944 maxSize:1086324736 maxEntrySize:543162368
+14 notice
+15 notice 📦  broadcast-websocket@0.1.0
+16 notice Tarball Contents
+17 notice 2.7kB README.md
+17 notice 10.6kB dist/index.cjs
+17 notice 21.2kB dist/index.cjs.map
+17 notice 1.8kB dist/index.d.cts
+17 notice 1.8kB dist/index.d.ts
+17 notice 9.6kB dist/index.js
+17 notice 21.0kB dist/index.js.map
+17 notice 11.6kB dist/scripts/demo.cjs
+17 notice 25.2kB dist/scripts/demo.cjs.map
+17 notice 13B dist/scripts/demo.d.cts
+17 notice 13B dist/scripts/demo.d.ts
+17 notice 11.6kB dist/scripts/demo.js
+17 notice 25.2kB dist/scripts/demo.js.map
+17 notice 794B package.json
+18 notice Tarball Details
+19 notice name: broadcast-websocket
+20 notice version: 0.1.0
+21 notice filename: broadcast-websocket-0.1.0.tgz
+22 notice package size: 13.5 kB
+23 notice unpacked size: 143.1 kB
+24 notice shasum: b846fb6b658ca0afbfa7c608e5ea48cbeda51492
+25 notice integrity: sha512-JkoJbmr2ca4hs[...]hCufGajFirCqw==
+26 notice total files: 14
+27 notice
+28 verbose cwd /home/jihoon/magic/broadcast-websocket
+29 verbose os Linux 6.14.0-29-generic
+30 verbose node v22.18.0
+31 verbose npm  v10.9.3
+32 verbose exit 0
+33 info ok

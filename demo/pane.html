@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BWS Iframe Pane</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 10px; }
+      #log { height: 240px; overflow: auto; border: 1px solid #ccc; border-radius: 6px; padding: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; background: #fafafa; }
+      .row { display: flex; gap: 8px; margin-top: 8px; }
+      input[type="text"] { flex: 1; padding: 8px; }
+      button { padding: 8px 12px; }
+      .meta { color: #666; font-size: 12px; margin: 6px 0; }
+      code { background: #f2f2f2; padding: 2px 4px; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <div class="meta">
+      <span id="name"></span>
+      · Leader: <code id="leader"></code>
+      · State: <code id="state"></code>
+    </div>
+    <div id="log"></div>
+    <div class="row">
+  <input id="text" type="text" placeholder="Type message and press Enter or Send!" autofocus />
+      <button id="send">Send</button>
+    </div>
+
+    <script type="module" src="../dist/scripts/demo.js"></script>
+  </body>
+  </html>
+  
