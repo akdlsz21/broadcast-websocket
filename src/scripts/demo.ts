@@ -10,8 +10,11 @@ function mustEl<T extends HTMLElement = HTMLElement>(id: string): T {
   return el;
 }
 
-function appendLog($log: HTMLElement, line: string) {
+type LogKind = 'system' | 'send-direct' | 'send-delegated' | 'message-direct' | 'message-delegated';
+
+function appendLog($log: HTMLElement, line: string, kind: LogKind = 'system') {
   const div = document.createElement('div');
+  div.classList.add('line', kind);
   div.textContent = `[${new Date().toLocaleTimeString()}] ${line}`;
   $log.appendChild(div);
   $log.scrollTop = $log.scrollHeight;
@@ -26,12 +29,13 @@ function appendLog($log: HTMLElement, line: string) {
   const $name = getEl('name');
   if ($name) $name.textContent = `Widget: ${name}`;
 
-  const bws = new BWS(url) 
+  const bws = new BWS(url);
 
   const $log = mustEl('log');
   const $meta = getEl('meta'); // simple.html
   const $leader = getEl('leader'); // pane.html
   const $state = getEl('state'); // pane.html
+  const $role = getEl('role'); // pane.html banner
 
   const $send = mustEl<HTMLButtonElement>('send');
   const $text = mustEl<HTMLInputElement>('text');
@@ -41,31 +45,34 @@ function appendLog($log: HTMLElement, line: string) {
     if ($meta) {
       $meta.textContent = `leader=${s.isLeader ? 'yes' : 'no'} leaderId=${s.leaderId || '—'} state=${s.readyState} buffered=${s.bufferedAmount}`;
     }
-    if ($leader) {
-      $leader.textContent = s.isLeader ? 'yes' : `no (leaderId=${s.leaderId || '—'})`;
-    }
-    if ($state) {
-      $state.textContent = String(s.readyState);
-    }
+    if ($leader) $leader.textContent = s.isLeader ? 'yes' : `no (leaderId=${s.leaderId || '—'})`;
+    if ($state) $state.textContent = String(s.readyState);
+    if ($role) $role.textContent = s.isLeader ? 'Leader' : 'Follower';
+    document.body.classList.toggle('role-leader', s.isLeader);
+    document.body.classList.toggle('role-follower', !s.isLeader);
   }
 
   // Wire WebSocket-like handlers
-  bws.onopen = () => { appendLog($log, `open (url=${url})`); render(); };
-  bws.onmessage = (e) => appendLog($log, 'message ' + String(e.data));
-  bws.onerror = () => appendLog($log, 'error');
-  bws.onclose = () => { appendLog($log, 'close'); render(); };
+  bws.onopen = () => { appendLog($log, `open (url=${url})`, 'system'); render(); };
+  bws.onmessage = (e) => {
+    const status = (bws as BroadcastWebsocket).status();
+    appendLog($log, 'message ' + String(e.data), status.isLeader ? 'message-direct' : 'message-delegated');
+  };
+  bws.onerror = () => appendLog($log, 'error', 'system');
+  bws.onclose = () => { appendLog($log, 'close', 'system'); render(); };
 
   function doSend() {
     const raw = $text.value;
     if (!raw || !raw.trim()) return; // ignore empty
     // Send text frames (string). If JSON is typed, pass it through as-is.
     const payload = raw;
+    const status = (bws as BroadcastWebsocket).status();
     try {
       bws.send(payload);
-      appendLog($log, 'send ' + payload);
+      appendLog($log, 'send ' + payload, status.isLeader ? 'send-direct' : 'send-delegated');
       $text.value = '';
     } catch (err) {
-      appendLog($log, 'send-error ' + String(err));
+      appendLog($log, 'send-error ' + String(err), 'system');
     }
   }
 

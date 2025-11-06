@@ -29,6 +29,51 @@ bws.send(JSON.stringify({ hello: 'world' }));
 
 Create a `BroadcastWebsocket` in each tab or iframe. The leader opens the socket; followers delegate `send()` via BroadcastChannel and receive messages broadcast by the leader. Zero-queue: sends can drop if the leader isn’t ready.
 
+## Architecture
+
+```
++---------------------------------------------------------------------------------------+
+|                                    BroadcastWebsocket                                 |
+|---------------------------------------------------------------------------------------|
+| Constructor                                                                          |
+|  • Accepts `url`, optional WebSocket protocols, optional `scope`.                     |
+|  • Derives `scope` → used to namespace election + bus (browser-origin scoped).        |
+|                                                                                       |
+| Internal Composition                                                                  |
+|  ┌───────────────────────────┐        ┌────────────────────┐                          |
+|  | SimpleElection (controller)|<──────>| BroadcastChannel BC|                          |
+|  |   scope = "bws:scope"     |        | name = "bws:bus:… " |                          |
+|  |   emits: leader/follower  |        |  ⇣ Bus wrapper      |                          |
+|  └──────────────┬────────────┘        └──────────┬──────────┘                          |
+|                 |                                 |                                     |
+|                 | leader → open socket            | forwards messages between tabs      |
+|                 | follower → close socket         |                                     |
+|                 v                                 v                                     |
+|        ┌────────────────┐                ┌──────────────────────────────┐               |
+|        | window.WebSocket|                | Bus.post / Bus.on            |               |
+|        |  (real network) |                |  {kind:'out'|'in'|'sys',…}    |               |
+|        └─┬───────────────┘                └──────────────┬───────────────┘               |
+|          │                                              │                               |
+|          │ onopen/message/error/close                   │ delivers events via Broadcast |
+|          │ emit → BroadcastWebsocket emitter            │ Channel to other panes        |
+|          │                                              │                               |
+|          ▼                                              ▼                               |
+|  BroadcastWebsocket exposes WebSocket-like surface:                                     |
+|   - readyState/bufferedAmount/status()                                                     |
+|   - send(): leader sends on ws; follower delegates via Bus (`kind:'out'`)                  |
+|   - close(): leader closes real socket; follower emits synthetic close                     |
+|   - EventTarget: addEventListener / onopen/onmessage/onerror/onclose                      |
+|                                                                                           |
+| Delegation Flow                                                                           |
+|   Follower send() ──> Bus.post {kind:'out'} ──> Leader Bus listener ──> ws.send()         |
+|   Leader message ──> ws.onmessage ──> Bus.post {kind:'in'} ──> Followers emit message     |
+|   Leader lifecycle ──> Bus.post {kind:'sys'} ──> Followers mirror open/close transitions   |
+|                                                                                           |
+| Disposal                                                                                  |
+|   dispose() → close ws, stop election, unsubscribe bus, close channel                     |
++---------------------------------------------------------------------------------------+
+```
+
 ## Options
 
 - `scope?: string` — Leader election namespace (defaults to URL origin)
