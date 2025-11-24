@@ -140,7 +140,10 @@ export class BroadcastWebsocket implements WebSocket {
 		this.transition(this.CLOSED);
 		if (this.election) this.election.stop();
 		if (this.unsubBus) this.unsubBus();
-		if (this.bus) this.bus.close();
+		if (this.bus) {
+			this.bus.close();
+			this.bus = undefined;
+		}
 	}
 
 	// Internals

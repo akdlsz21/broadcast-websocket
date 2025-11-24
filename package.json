@@ -23,14 +23,38 @@
     "dev": "tsup --watch",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run build",
-    "demo:server": "node demo/server.js"
+    "demo:server": "node scripts/server.js",
+    "server": "node scripts/server.js",
+    "start": "node scripts/server.js",
+    "test": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
+  "keywords": [
+    "websocket",
+    "broadcast",
+    "client",
+    "reconnect",
+    "backoff"
+  ],
+  "author": "Jihoon",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/akdlsz21/broadcast-websocket.git"
+  },
+  "bugs": {
+    "url": "https://github.com/akdlsz21/broadcast-websocket/issues"
+  },
+  "homepage": "https://github.com/akdlsz21/broadcast-websocket#readme",
   "engines": {
     "node": ">=16"
   },
   "devDependencies": {
+    "@types/ws": "^8.18.1",
+    "@vitest/coverage-v8": "^4.0.13",
+    "happy-dom": "^20.0.10",
     "tsup": "^8.5.0",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "vitest": "^4.0.13"
   },
   "dependencies": {
     "ws": "^8.18.3"
