@@ -1,4 +1,4 @@
-# BroadcastWebsocket
+<img width="1056" height="719" alt="image" src="https://github.com/user-attachments/assets/3ce675c6-1dbb-4414-82a7-8ee6d6848234" /># BroadcastWebsocket
 
 Single-connection, multi-tab friendly WebSocket wrapper. Exactly one tab (leader) opens a real WebSocket; followers delegate sends and receive broadcasts via BroadcastChannel. The class implements the WebSocket interface (onopen, onmessage, send, close, addEventListener, etc.).
 
@@ -29,11 +29,7 @@ Create a `BroadcastWebsocket` in each tab or iframe. The leader opens the socket
 
 ## Architecture
 
-
-```
-<img width="1056" height="719" alt="image" src="https://github.com/user-attachments/assets/030bdd52-15fb-4ca1-904f-a261ad133352" />
-
-```
+<img width="1056" height="719" alt="image" src="https://github.com/user-attachments/assets/067afba6-a9fc-4918-aeb8-da8bc6e8384a" />
 
 ## Options
 
