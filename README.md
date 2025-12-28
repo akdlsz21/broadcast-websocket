@@ -1,8 +1,6 @@
-# BroadcastWebsocket (MVP)
+# BroadcastWebsocket
 
 Single-connection, multi-tab friendly WebSocket wrapper. Exactly one tab (leader) opens a real WebSocket; followers delegate sends and receive broadcasts via BroadcastChannel. The class implements the WebSocket interface (onopen, onmessage, send, close, addEventListener, etc.).
-
-Status: MVP
 
 ## Install
 
@@ -31,47 +29,9 @@ Create a `BroadcastWebsocket` in each tab or iframe. The leader opens the socket
 
 ## Architecture
 
+
 ```
-+---------------------------------------------------------------------------------------+
-|                                    BroadcastWebsocket                                 |
-|---------------------------------------------------------------------------------------|
-| Constructor                                                                          |
-|  • Accepts `url`, optional WebSocket protocols, optional `scope`.                     |
-|  • Derives `scope` → used to namespace election + bus (browser-origin scoped).        |
-|                                                                                       |
-| Internal Composition                                                                  |
-|  ┌───────────────────────────┐        ┌────────────────────┐                          |
-|  | SimpleElection (controller)|<──────>| BroadcastChannel BC|                          |
-|  |   scope = "bws:scope"     |        | name = "bws:bus:… " |                          |
-|  |   emits: leader/follower  |        |  ⇣ Bus wrapper      |                          |
-|  └──────────────┬────────────┘        └──────────┬──────────┘                          |
-|                 |                                 |                                     |
-|                 | leader → open socket            | forwards messages between tabs      |
-|                 | follower → close socket         |                                     |
-|                 v                                 v                                     |
-|        ┌────────────────┐                ┌──────────────────────────────┐               |
-|        | window.WebSocket|                | Bus.post / Bus.on            |               |
-|        |  (real network) |                |  {kind:'out'|'in'|'sys',…}    |               |
-|        └─┬───────────────┘                └──────────────┬───────────────┘               |
-|          │                                              │                               |
-|          │ onopen/message/error/close                   │ delivers events via Broadcast |
-|          │ emit → BroadcastWebsocket emitter            │ Channel to other panes        |
-|          │                                              │                               |
-|          ▼                                              ▼                               |
-|  BroadcastWebsocket exposes WebSocket-like surface:                                     |
-|   - readyState/bufferedAmount/status()                                                     |
-|   - send(): leader sends on ws; follower delegates via Bus (`kind:'out'`)                  |
-|   - close(): leader closes real socket; follower emits synthetic close                     |
-|   - EventTarget: addEventListener / onopen/onmessage/onerror/onclose                      |
-|                                                                                           |
-| Delegation Flow                                                                           |
-|   Follower send() ──> Bus.post {kind:'out'} ──> Leader Bus listener ──> ws.send()         |
-|   Leader message ──> ws.onmessage ──> Bus.post {kind:'in'} ──> Followers emit message     |
-|   Leader lifecycle ──> Bus.post {kind:'sys'} ──> Followers mirror open/close transitions   |
-|                                                                                           |
-| Disposal                                                                                  |
-|   dispose() → close ws, stop election, unsubscribe bus, close channel                     |
-+---------------------------------------------------------------------------------------+
+
 ```
 
 ## Options
@@ -107,7 +67,7 @@ Note: Zero-queue — if the leader is not connected yet, follower sends posted v
 
 ## Caveats
 
-- Requires `BroadcastChannel` (delegation/broadcast) and `localStorage` (election); there is no fallback in this MVP.
+- Requires `BroadcastChannel` (delegation/broadcast) and `localStorage` (election) to coordinate between tabs.
 - Browser WebSocket API does not expose native ping/pong. If you need keepalives, implement app-level pings.
 - No buffering/queues: follower sends emitted before leader is ready may be dropped.
 

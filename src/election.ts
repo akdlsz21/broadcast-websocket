@@ -6,9 +6,7 @@ export interface ElectionEvents {
 	change: { leaderId?: string };
 }
 
-type Unsub = () => void;
-
-export class SimpleElection {
+export class Election {
 	readonly scope: string;
 	readonly id: string;
 	readonly key: string;

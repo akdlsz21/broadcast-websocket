@@ -1,7 +1,7 @@
 {
   "name": "broadcast-websocket",
   "version": "0.1.0",
-  "description": "Minimal WebSocket client with reconnect/backoff (MVP).",
+  "description": "Shared WebSocket connection across multiple tabs/windows.",
   "license": "MIT",
   "type": "module",
   "main": "dist/index.cjs",
@@ -33,8 +33,9 @@
     "websocket",
     "broadcast",
     "client",
-    "reconnect",
-    "backoff"
+    "client",
+    "shared",
+    "multi-tab"
   ],
   "author": "Jihoon",
   "repository": {

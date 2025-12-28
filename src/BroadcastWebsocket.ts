@@ -2,7 +2,7 @@ import { Emitter, randomId } from './utils';
 import type { Options, StatusSnapshot } from './types';
 
 import { Bus } from './bus';
-import { SimpleElection } from './election';
+import { Election } from './election';
 
 type ReadyState = 0 | 1 | 2 | 3; // CONNECTING, OPEN, CLOSING, CLOSED
 
@@ -34,7 +34,7 @@ export class BroadcastWebsocket implements WebSocket {
 	private ready: ReadyState = this.CONNECTING;
 	private ws?: WebSocket;
 	private opts: Options;
-	private election: SimpleElection;
+	private election: Election;
 	private leaderId?: string;
 	private bus?: Bus;
 	private unsubBus?: () => void;
@@ -55,7 +55,7 @@ export class BroadcastWebsocket implements WebSocket {
 
 		this.opts = options;
 		// start simple leader election
-		this.election = new SimpleElection(this.scope, {
+		this.election = new Election(this.scope, {
 			id: this.id,
 			heartbeatMs: options.heartbeatMs,
 			timeoutMs: options.timeoutMs,
