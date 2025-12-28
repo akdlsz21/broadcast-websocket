@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>BroadcastWebsocket Interactive Demo</title>
+		<style>
+			:root {
+				font-family: system-ui, -apple-system, sans-serif;
+			}
+			body {
+				margin: 0;
+				padding: 20px;
+				background: #f1f5f9;
+				display: flex;
+				flex-direction: column;
+				height: 100vh;
+				box-sizing: border-box;
+			}
+			header {
+				margin-bottom: 20px;
+				display: flex;
+				gap: 16px;
+				align-items: center;
+			}
+			h1 {
+				margin: 0;
+				font-size: 1.25rem;
+				color: #0f172a;
+			}
+			.controls {
+				display: flex;
+				gap: 8px;
+			}
+			button {
+				padding: 8px 16px;
+				border: 1px solid #cbd5e1;
+				background: #fff;
+				border-radius: 6px;
+				cursor: pointer;
+				font-weight: 500;
+				color: #334155;
+				transition: all 0.2s;
+			}
+			button:hover {
+				background: #f8fafc;
+				border-color: #94a3b8;
+			}
+			button.primary {
+				background: #2563eb;
+				color: white;
+				border-color: #2563eb;
+			}
+			button.primary:hover {
+				background: #1d4ed8;
+				border-color: #1d4ed8;
+			}
+			#grid {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 16px;
+				flex: 1;
+				align-content: flex-start;
+				overflow: auto;
+			}
+			.frame-wrapper {
+				width: 400px;
+				height: 500px;
+				display: flex;
+				flex-direction: column;
+				background: white;
+				border: 1px solid #e2e8f0;
+				border-radius: 12px;
+				overflow: hidden;
+				box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+				resize: both;
+			}
+			.frame-header {
+				padding: 8px 12px;
+				background: #f8fafc;
+				border-bottom: 1px solid #e2e8f0;
+				font-size: 0.75rem;
+				color: #64748b;
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+			}
+			.close-btn {
+				border: none;
+				background: transparent;
+				color: #ef4444;
+				cursor: pointer;
+				font-size: 14px;
+				padding: 2px 6px;
+			}
+			.close-btn:hover {
+				background: #fee2e2;
+				border-radius: 4px;
+			}
+			iframe {
+				width: 100%;
+				height: 100%;
+				border: none;
+				flex: 1;
+			}
+		</style>
+	</head>
+	<body>
+		<header>
+			<h1>BroadcastWebsocket Demo</h1>
+			<div class="controls">
+				<button class="primary" onclick="addClient()">+ Add Client</button>
+				<button onclick="clearClients()">Clear All</button>
+			</div>
+			<div style="flex:1"></div>
+			<div style="font-size: 0.875rem; color: #64748b;">
+				Open developer console to see shared connection logs.
+			</div>
+		</header>
+
+		<div id="grid">
+			<!-- iframes go here -->
+		</div>
+
+		<script>
+			const grid = document.getElementById('grid');
+			let count = 0;
+
+			function addClient() {
+				count++;
+				const wrapper = document.createElement('div');
+				wrapper.className = 'frame-wrapper';
+				wrapper.innerHTML = `
+        <div class="frame-header">
+          <span>Client #${count}</span>
+          <button class="close-btn" onclick="this.closest('.frame-wrapper').remove()">×</button>
+        </div>
+        <iframe src="pane.html"></iframe>
+      `;
+				grid.appendChild(wrapper);
+			}
+
+			function clearClients() {
+				grid.innerHTML = '';
+				count = 0;
+			}
+
+			// Start with 2 clients
+			addClient();
+			addClient();
+		</script>
+	</body>
+</html>

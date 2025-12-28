@@ -1,4 +1,4 @@
-import { Emitter, randomId, now } from './utils';
+import { now, randomId } from './utils';
 
 export interface ElectionEvents {
 	leader: { id: string };
@@ -6,26 +6,25 @@ export interface ElectionEvents {
 	change: { leaderId?: string };
 }
 
-export class Election {
+export class Election extends EventTarget {
 	readonly scope: string;
 	readonly id: string;
 	readonly key: string;
 	private heartbeatMs: number;
 	private timeoutMs: number;
+	// biome-ignore lint/suspicious/noExplicitAny: timer
 	private timer?: any;
-	private emitter = new Emitter<ElectionEvents>();
 	private _leaderId?: string;
 	private storageHandler?: (e: StorageEvent) => void;
 
 	constructor(scope: string, opts?: { id?: string; heartbeatMs?: number; timeoutMs?: number }) {
+		super();
 		this.scope = scope;
 		this.id = opts?.id ?? randomId(8);
 		this.key = `bws:leader:${scope}`;
 		this.heartbeatMs = opts?.heartbeatMs ?? 3000;
 		this.timeoutMs = opts?.timeoutMs ?? 9000;
 	}
-
-	on = this.emitter.on.bind(this.emitter);
 
 	get leaderId(): string | undefined {
 		return this._leaderId;
@@ -85,14 +84,15 @@ export class Election {
 		const changed = nextId !== this._leaderId;
 		this._leaderId = nextId;
 		if (changed) {
-			this.emitter.emit('change', { leaderId: this._leaderId });
-			if (this.isLeader) this.emitter.emit('leader', { id: this.id });
-			else this.emitter.emit('follower', { leaderId: this._leaderId });
+			this.dispatchEvent(new CustomEvent('change', { detail: { leaderId: this._leaderId } }));
+			if (this.isLeader) this.dispatchEvent(new CustomEvent('leader', { detail: { id: this.id } }));
+			else this.dispatchEvent(new CustomEvent('follower', { detail: { leaderId: this._leaderId } }));
 		}
 	}
 
 	private tryClaimIfExpired() {
 		let stale = true;
+		// biome-ignore lint/suspicious/noExplicitAny: storage value
 		let current: any;
 		try {
 			const val = localStorage.getItem(this.key);

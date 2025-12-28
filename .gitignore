@@ -3,6 +3,8 @@
 node_modules/
 dist/
 build/
+demo/dist/
+coverage/
 .env
 .DS_Store
 npm-debug.log*

@@ -1,4 +1,4 @@
-export type BusMessage = { kind: 'out' | 'in' | 'sys'; payload?: any; type?: 'open' | 'close' | 'error' };
+export type BusMessage = { kind: 'out' | 'in' | 'sys'; payload?: unknown; type?: 'open' | 'close' | 'error' };
 
 export class Bus {
 	private ch: BroadcastChannel;

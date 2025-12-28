@@ -1,21 +1,20 @@
-import { Emitter, randomId } from './utils';
-import type { Options, StatusSnapshot } from './types';
-
 import { Bus } from './bus';
 import { Election } from './election';
+import type { Options, StatusSnapshot } from './types';
+import { randomId } from './utils';
 
 type ReadyState = 0 | 1 | 2 | 3; // CONNECTING, OPEN, CLOSING, CLOSED
 
-export class BroadcastWebsocket implements WebSocket {
-	static readonly CONNECTING = 0;
-	static readonly OPEN = 1;
-	static readonly CLOSING = 2;
-	static readonly CLOSED = 3;
+export class BroadcastWebsocket extends EventTarget implements WebSocket {
+	static readonly CONNECTING = WebSocket.CONNECTING;
+	static readonly OPEN = WebSocket.OPEN;
+	static readonly CLOSING = WebSocket.CLOSING;
+	static readonly CLOSED = WebSocket.CLOSED;
 
-	readonly CONNECTING = 0;
-	readonly OPEN = 1;
-	readonly CLOSING = 2;
-	readonly CLOSED = 3;
+	readonly CONNECTING = WebSocket.CONNECTING;
+	readonly OPEN = WebSocket.OPEN;
+	readonly CLOSING = WebSocket.CLOSING;
+	readonly CLOSED = WebSocket.CLOSED;
 
 	readonly url: string;
 	readonly scope: string;
@@ -29,7 +28,6 @@ export class BroadcastWebsocket implements WebSocket {
 	onerror: WebSocket['onerror'] = null;
 	onclose: WebSocket['onclose'] = null;
 
-	private emitter = new Emitter<{ open: Event; message: MessageEvent; error: Event; close: CloseEvent }>();
 	private id = randomId(8);
 	private ready: ReadyState = this.CONNECTING;
 	private ws?: WebSocket;
@@ -40,6 +38,7 @@ export class BroadcastWebsocket implements WebSocket {
 	private unsubBus?: () => void;
 
 	constructor(url: string, options: Options = {}) {
+		super();
 		this.url = url;
 		this.opts = options;
 		this.scope =
@@ -54,7 +53,7 @@ export class BroadcastWebsocket implements WebSocket {
 		console.log(`[BWS] id=${this.id} url=${url} scope=${this.scope}`);
 
 		this.opts = options;
-		// start simple leader election
+
 		this.election = new Election(this.scope, {
 			id: this.id,
 			heartbeatMs: options.heartbeatMs,
@@ -65,12 +64,13 @@ export class BroadcastWebsocket implements WebSocket {
 			this.bus = new Bus(`bws:bus:${this.scope}`);
 			this.unsubBus = this.bus.on((msg) => this.onBus(msg));
 		} catch (e) {}
-		this.election.on('leader', () => {
+		this.election.addEventListener('leader', () => {
 			this.leaderId = this.id;
 			this.openSocket();
 		});
-		this.election.on('follower', (e) => {
-			this.leaderId = e.leaderId;
+		// biome-ignore lint/suspicious/noExplicitAny: event detail
+		this.election.addEventListener('follower', (e: any) => {
+			this.leaderId = e.detail.leaderId;
 			// ensure we are not holding a socket
 			if (this.ws) {
 				try {
@@ -83,26 +83,6 @@ export class BroadcastWebsocket implements WebSocket {
 		this.election.start();
 	}
 
-	// EventTarget-like API
-	addEventListener<K extends keyof WebSocketEventMap>(
-		type: K,
-		listener: (this: WebSocket, ev: WebSocketEventMap[K]) => any,
-		_options?: boolean | AddEventListenerOptions
-	): void {
-		this.emitter.on(type as any, listener as any);
-	}
-	removeEventListener<K extends keyof WebSocketEventMap>(
-		type: K,
-		listener: (this: WebSocket, ev: WebSocketEventMap[K]) => any,
-		_options?: boolean | EventListenerOptions
-	): void {
-		this.emitter.off(type as any, listener as any);
-	}
-	dispatchEvent(event: Event): boolean {
-		this.emitter.emit(event.type as any, event as any);
-		return true;
-	}
-
 	get readyState(): ReadyState {
 		return this.ready;
 	}
@@ -113,6 +93,7 @@ export class BroadcastWebsocket implements WebSocket {
 	send(data: string | ArrayBufferLike | Blob | ArrayBufferView) {
 		if (this.election.isLeader) {
 			if (this.ready !== this.OPEN || !this.ws) throw new Error('WebSocket not open');
+			// biome-ignore lint/suspicious/noExplicitAny: websocket data
 			this.ws.send(data as any);
 			return;
 		}
@@ -126,7 +107,7 @@ export class BroadcastWebsocket implements WebSocket {
 			this.transition(this.CLOSING);
 			const ev = new CloseEvent('close', { code: code ?? 1000, reason: reason ?? '', wasClean: true });
 			this.transition(this.CLOSED);
-			this.emitter.emit('close', ev);
+			this.dispatchEvent(ev);
 			this.onclose?.call(this, ev);
 			return;
 		}
@@ -165,31 +146,50 @@ export class BroadcastWebsocket implements WebSocket {
 			this.ws = ws;
 			ws.onopen = () => {
 				this.protocol = ws.protocol;
+				// biome-ignore lint/suspicious/noExplicitAny: extensions prop
 				this.extensions = (ws as any).extensions || '';
 				this.transition(this.OPEN);
 				const ev = new Event('open');
-				this.emitter.emit('open', ev);
+				this.dispatchEvent(ev);
 				this.onopen?.call(this, ev);
 				this.bus?.post({ kind: 'sys', type: 'open' });
 			};
 			ws.onmessage = (ev) => {
-				this.emitter.emit('message', ev as any);
-				this.onmessage?.call(this, ev as any);
+				const newMessage = new MessageEvent('message', {
+					// biome-ignore lint/suspicious/noExplicitAny: event props
+					data: (ev as any).data,
+					// biome-ignore lint/suspicious/noExplicitAny: event props
+					lastEventId: (ev as any).lastEventId,
+					// biome-ignore lint/suspicious/noExplicitAny: event props
+					origin: (ev as any).origin,
+					// biome-ignore lint/suspicious/noExplicitAny: event props
+					ports: (ev as any).ports,
+					// biome-ignore lint/suspicious/noExplicitAny: event props
+					source: (ev as any).source,
+				});
+				this.dispatchEvent(newMessage);
+				this.onmessage?.call(this, newMessage);
 				this.bus?.post({ kind: 'in', payload: (ev as any).data });
 			};
 			ws.onerror = (ev) => {
-				this.emitter.emit('error', ev as any);
-				this.onerror?.call(this, ev as any);
+				const newError = new Event('error');
+				this.dispatchEvent(newError);
+				this.onerror?.call(this, newError);
 			};
 			ws.onclose = (ev) => {
 				this.transition(this.CLOSED);
-				this.emitter.emit('close', ev as any);
-				this.onclose?.call(this, ev as any);
+				const newClose = new CloseEvent('close', {
+					code: ev.code,
+					reason: ev.reason,
+					wasClean: ev.wasClean,
+				});
+				this.dispatchEvent(newClose);
+				this.onclose?.call(this, newClose);
 				this.bus?.post({ kind: 'sys', type: 'close' });
 			};
 		} catch (err) {
 			const ev = new Event('error');
-			this.emitter.emit('error', ev);
+			this.dispatchEvent(ev);
 			this.onerror?.call(this, ev);
 		}
 	}
@@ -211,7 +211,7 @@ export class BroadcastWebsocket implements WebSocket {
 		if (m.kind === 'in') {
 			if (this.election.isLeader) return;
 			const ev = new MessageEvent('message', { data: m.payload });
-			this.emitter.emit('message', ev);
+			this.dispatchEvent(ev);
 			this.onmessage?.call(this, ev);
 			return;
 		}
@@ -220,12 +220,12 @@ export class BroadcastWebsocket implements WebSocket {
 			if (m.type === 'open' && this.ready !== this.OPEN) {
 				this.transition(this.OPEN);
 				const ev = new Event('open');
-				this.emitter.emit('open', ev);
+				this.dispatchEvent(ev);
 				this.onopen?.call(this, ev);
 			} else if (m.type === 'close' && this.ready !== this.CLOSED) {
 				this.transition(this.CLOSED);
 				const ev = new CloseEvent('close');
-				this.emitter.emit('close', ev);
+				this.dispatchEvent(ev);
 				this.onclose?.call(this, ev);
 			}
 		}

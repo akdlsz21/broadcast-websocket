@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
-import { BroadcastWebsocket } from './BroadcastWebsocket';
 import { spawn } from 'child_process';
 import path from 'path';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { BroadcastWebsocket } from './BroadcastWebsocket';
 
 describe('BroadcastWebsocket', () => {
 	let instances: BroadcastWebsocket[] = [];
@@ -48,7 +48,9 @@ describe('BroadcastWebsocket', () => {
 	});
 
 	afterEach(() => {
-		instances.forEach((i) => i.dispose());
+		instances.forEach((i) => {
+			i.dispose();
+		});
 	});
 
 	const createInstance = () => {
@@ -66,7 +68,8 @@ describe('BroadcastWebsocket', () => {
 			const check = () => {
 				if (ws.readyState === state) resolve();
 				else if (ws.readyState === 3 && state !== 3) reject(new Error('Socket closed unexpectedly'));
-				else if (Date.now() - start > 2000) reject(new Error(`Timed out waiting for state ${state}, current: ${ws.readyState}`));
+				else if (Date.now() - start > 2000)
+					reject(new Error(`Timed out waiting for state ${state}, current: ${ws.readyState}`));
 				else setTimeout(check, 10);
 			};
 			check();

@@ -2,7 +2,7 @@
  * Minimal WebSocket echo/broadcast server for local testing.
  */
 
-import { WebSocketServer, WebSocket } from 'ws';
+import { WebSocket, WebSocketServer } from 'ws';
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8787;
 const wss = new WebSocketServer({ port: PORT });

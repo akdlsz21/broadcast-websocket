@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { BroadcastWebsocket } from '../src/BroadcastWebsocket';
 
 describe('BroadcastWebsocket Runtime Compliance', () => {
@@ -46,7 +46,7 @@ describe('BroadcastWebsocket Runtime Compliance', () => {
 
 	it('should accept generic EventListener', () => {
 		const bws = new BroadcastWebsocket(url);
-		const listener = { handleEvent: (e: Event) => {} };
+		const _listener = { handleEvent: (_e: Event) => {} };
 		// This is valid in standard EventTarget but might not be implemented in minimal custom implementations
 		// Standard WebSocket inherits from EventTarget.
 		// Let's check if our implementation supports object listeners if it claims to be a WebSocket.

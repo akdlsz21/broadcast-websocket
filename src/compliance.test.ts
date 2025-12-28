@@ -1,4 +1,4 @@
-import { describe, test, assertType } from 'vitest';
+import { assertType, describe, test } from 'vitest';
 import { BroadcastWebsocket } from './BroadcastWebsocket';
 
 describe('BroadcastWebsocket Static Compliance', () => {
