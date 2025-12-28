@@ -31,6 +31,7 @@ Create a `BroadcastWebsocket` in each tab or iframe. The leader opens the socket
 
 
 ```
+<img width="1056" height="719" alt="image" src="https://github.com/user-attachments/assets/030bdd52-15fb-4ca1-904f-a261ad133352" />
 
 ```
 
