@@ -1,18 +1,23 @@
 import { Emitter, randomId } from './utils';
 import type { Options, StatusSnapshot } from './types';
-import { SimpleElection } from './election';
+
 import { Bus } from './bus';
+import { SimpleElection } from './election';
 
 type ReadyState = 0 | 1 | 2 | 3; // CONNECTING, OPEN, CLOSING, CLOSED
 
 export class BroadcastWebsocket implements WebSocket {
+	static readonly CONNECTING = 0;
+	static readonly OPEN = 1;
+	static readonly CLOSING = 2;
+	static readonly CLOSED = 3;
+
 	readonly CONNECTING = 0;
 	readonly OPEN = 1;
 	readonly CLOSING = 2;
 	readonly CLOSED = 3;
 
 	readonly url: string;
-	readonly protocols?: string | string[];
 	readonly scope: string;
 
 	binaryType: 'blob' | 'arraybuffer' = 'blob';
@@ -28,7 +33,7 @@ export class BroadcastWebsocket implements WebSocket {
 	private id = randomId(8);
 	private ready: ReadyState = this.CONNECTING;
 	private ws?: WebSocket;
-	private opts: { protocols?: string | string[] };
+	private opts: Options;
 	private election: SimpleElection;
 	private leaderId?: string;
 	private bus?: Bus;
@@ -36,7 +41,7 @@ export class BroadcastWebsocket implements WebSocket {
 
 	constructor(url: string, options: Options = {}) {
 		this.url = url;
-		this.protocols = options.protocols;
+		this.opts = options;
 		this.scope =
 			options.scope ??
 			(() => {
@@ -46,10 +51,15 @@ export class BroadcastWebsocket implements WebSocket {
 					return 'default';
 				}
 			})();
+		console.log(`[BWS] id=${this.id} url=${url} scope=${this.scope}`);
 
-		this.opts = { protocols: options.protocols };
+		this.opts = options;
 		// start simple leader election
-		this.election = new SimpleElection(this.scope);
+		this.election = new SimpleElection(this.scope, {
+			id: this.id,
+			heartbeatMs: options.heartbeatMs,
+			timeoutMs: options.timeoutMs,
+		});
 		// Setup broadcast channel for message forwarding
 		try {
 			this.bus = new Bus(`bws:bus:${this.scope}`);
@@ -150,7 +160,7 @@ export class BroadcastWebsocket implements WebSocket {
 	private openSocket() {
 		this.transition(this.CONNECTING);
 		try {
-			const ws = new WebSocket(this.url, this.protocols);
+			const ws = new WebSocket(this.url);
 			ws.binaryType = this.binaryType;
 			this.ws = ws;
 			ws.onopen = () => {
