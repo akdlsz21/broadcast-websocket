@@ -8,8 +8,6 @@ export function now(): number {
 	return Date.now();
 }
 
-// backoff/sleep removed for MVP (no reconnect)
-
 export function safeJsonStringify(v: unknown): string {
 	try {
 		return JSON.stringify(v);
@@ -17,5 +15,3 @@ export function safeJsonStringify(v: unknown): string {
 		return 'null';
 	}
 }
-
-// MVP: size helpers not needed

@@ -70,6 +70,14 @@ function appendLog($log: HTMLElement, line: string, kind: LogKind = 'system') {
 		appendLog($log, 'close', 'system');
 		render();
 	};
+	bws.addEventListener('sent', (e) => {
+		const detail = (e as CustomEvent).detail;
+		// Only log if we didn't send it ourselves (avoid duplicate logs, though demo logic below logs send-direct/delegated manually)
+		// Actually, standard practice for "sent" event is to notify that *someone* sent it.
+		// The demo's doSend() logs its own send. We should probably distinguish or just log everything.
+		// Let's log it as a distinct event to verify it works.
+		appendLog($log, 'global-sent ' + String(detail), 'system');
+	});
 
 	function doSend() {
 		const raw = $text.value;

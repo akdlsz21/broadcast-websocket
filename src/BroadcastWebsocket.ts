@@ -34,7 +34,7 @@ export class BroadcastWebsocket extends EventTarget implements WebSocket {
 	private opts: Options;
 	private election: Election;
 	private leaderId?: string;
-	private bus?: Bus;
+	private bus: Bus;
 	private unsubBus?: () => void;
 
 	constructor(url: string, options: Options = {}) {
@@ -60,10 +60,8 @@ export class BroadcastWebsocket extends EventTarget implements WebSocket {
 			timeoutMs: options.timeoutMs,
 		});
 		// Setup broadcast channel for message forwarding
-		try {
-			this.bus = new Bus(`bws:bus:${this.scope}`);
-			this.unsubBus = this.bus.on((msg) => this.onBus(msg));
-		} catch (e) {}
+		this.bus = new Bus(`bws:bus:${this.scope}`);
+		this.unsubBus = this.bus.on((msg) => this.onBus(msg));
 		this.election.addEventListener('leader', () => {
 			this.leaderId = this.id;
 			this.openSocket();
@@ -95,6 +93,10 @@ export class BroadcastWebsocket extends EventTarget implements WebSocket {
 			if (this.ready !== this.OPEN || !this.ws) throw new Error('WebSocket not open');
 			// biome-ignore lint/suspicious/noExplicitAny: websocket data
 			this.ws.send(data as any);
+			// Notify all tabs (including self) that a message was sent
+			const payload = data;
+			this.bus?.post({ kind: 'sent', payload });
+			this.dispatchEvent(new CustomEvent('sent', { detail: payload }));
 			return;
 		}
 		// delegate to leader via BroadcastChannel
@@ -131,10 +133,7 @@ export class BroadcastWebsocket extends EventTarget implements WebSocket {
 		this.transition(this.CLOSED);
 		if (this.election) this.election.stop();
 		if (this.unsubBus) this.unsubBus();
-		if (this.bus) {
-			this.bus.close();
-			this.bus = undefined;
-		}
+		this.bus.close();
 	}
 
 	// Internals
@@ -172,9 +171,8 @@ export class BroadcastWebsocket extends EventTarget implements WebSocket {
 				this.bus?.post({ kind: 'in', payload: (ev as any).data });
 			};
 			ws.onerror = (ev) => {
-				const newError = new Event('error');
-				this.dispatchEvent(newError);
-				this.onerror?.call(this, newError);
+				this.dispatchEvent(ev);
+				this.onerror?.call(this, ev);
 			};
 			ws.onclose = (ev) => {
 				this.transition(this.CLOSED);
@@ -199,13 +197,22 @@ export class BroadcastWebsocket extends EventTarget implements WebSocket {
 	}
 
 	private onBus(msg: any) {
-		const m = msg as { kind: 'out' | 'in' | 'sys'; payload?: any; type?: 'open' | 'close' | 'error' };
+		// biome-ignore lint/suspicious/noExplicitAny: any
+		const m = msg as { kind: 'out' | 'in' | 'sys' | 'sent'; payload?: any; type?: 'open' | 'close' | 'error' };
 		if (!m || !m.kind) return;
 		if (m.kind === 'out') {
 			if (!this.election.isLeader || !this.ws || this.ready !== this.OPEN) return;
 			try {
 				this.ws.send(m.payload as any);
+				// Notify all tabs that we sent this delegated message
+				this.bus.post({ kind: 'sent', payload: m.payload });
+				this.dispatchEvent(new CustomEvent('sent', { detail: m.payload }));
 			} catch {}
+			return;
+		}
+		if (m.kind === 'sent') {
+			if (this.election.isLeader) return; // Leader already dispatched it locally
+			this.dispatchEvent(new CustomEvent('sent', { detail: m.payload }));
 			return;
 		}
 		if (m.kind === 'in') {
