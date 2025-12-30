@@ -35,12 +35,18 @@ wss.on('connection', (ws, req) => {
 			/* keep as-is */
 		}
 
-		const wrapped = { type: 'message', from: id, ts: Date.now(), data: msg };
+		const payload = {
+			type: 'message',
+			from: id,
+			ts: Date.now(),
+			data: msg,
+			response: `response to ${text}`,
+		};
 
 		// Echo back
-		send(ws, wrapped);
-		// Broadcast
-		broadcast(wrapped, ws);
+		send(ws, payload);
+		// Broadcast to others
+		broadcast(payload, ws);
 	});
 
 	ws.on('close', () => {
@@ -51,16 +57,6 @@ wss.on('connection', (ws, req) => {
 	ws.on('error', (err) => {
 		console.warn(`[server] Error ${id}:`, err?.message || err);
 	});
-
-	// interval that sends message to client every 4 seconds
-	// setInterval(() => {
-	// 	send(ws, {
-	// 		type: 'message',
-	// 		data: Date.now(),
-	// 		from: id,
-	// 		ts: Date.now(),
-	// 	});
-	// }, 4000);
 });
 
 function broadcast(obj, except) {
