@@ -53,14 +53,14 @@ wss.on('connection', (ws, req) => {
 	});
 
 	// interval that sends message to client every 4 seconds
-	setInterval(() => {
-		send(ws, {
-			type: 'message',
-			data: Date.now(),
-			from: id,
-			ts: Date.now(),
-		});
-	}, 4000);
+	// setInterval(() => {
+	// 	send(ws, {
+	// 		type: 'message',
+	// 		data: Date.now(),
+	// 		from: id,
+	// 		ts: Date.now(),
+	// 	});
+	// }, 4000);
 });
 
 function broadcast(obj, except) {

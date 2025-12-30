@@ -19,7 +19,7 @@ Created `test/setup.ts` to:
 ### 4. Unit Tests
 Created `src/BroadcastWebsocket.test.ts` covering:
 - Initialization.
-- Leader election (simulating multiple tabs via localStorage).
+- Leader election (simulating multiple contexts via localStorage).
 - WebSocket connection (mocked).
 
 ## Verification Results

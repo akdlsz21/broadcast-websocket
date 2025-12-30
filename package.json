@@ -1,7 +1,7 @@
 {
 	"name": "broadcast-websocket",
 	"version": "0.1.0",
-	"description": "Shared WebSocket connection across multiple tabs/windows.",
+	"description": "Shared WebSocket connection across multiple contexts (windows, pages, embedded views).",
 	"license": "MIT",
 	"type": "module",
 	"main": "dist/index.cjs",
@@ -25,6 +25,7 @@
 		"clean": "rm -rf dist",
 		"prepublishOnly": "npm run build",
 		"demo:server": "node scripts/server.js",
+		"demo:react": "pnpm -C demo/react dev",
 		"server": "node scripts/server.js",
 		"start": "node scripts/server.js",
 		"test": "vitest",
@@ -37,9 +38,10 @@
 		"websocket",
 		"broadcast",
 		"client",
-		"client",
 		"shared",
-		"multi-tab"
+		"multi-context",
+		"multi-window",
+		"broadcastchannel"
 	],
 	"author": "Jihoon",
 	"repository": {

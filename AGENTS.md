@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-TypeScript sources live in `src/`, with the production entry in `src/index.ts` and the main class in `src/BroadcastWebsocket.ts`. Support modules, such as leader election (`src/election.ts`) and the BroadcastChannel bus (`src/bus.ts`), stay colocated. Demo helpers sit in `src/scripts/demo.ts`, and compiled artifacts land in `dist/` after a build. HTML demos under `demo/` exercise multi-tab scenarios, while `specs.md` captures design intent that should stay authoritative when changes are proposed.
+TypeScript sources live in `src/`, with the production entry in `src/index.ts` and the main class in `src/BroadcastWebsocket.ts`. Support modules, such as leader election (`src/election.ts`) and the BroadcastChannel bus (`src/bus.ts`), stay colocated. Demo helpers sit in `src/scripts/demo.ts`, and compiled artifacts land in `dist/` after a build. HTML demos under `demo/` exercise multi-context scenarios, while `specs.md` captures design intent that should stay authoritative when changes are proposed.
 
 ## Build, Test, and Development Commands
 Run `npm run build` to generate ESM, CJS, and type outputs via tsup; it cleans `dist/` first, so use it before publishing. Use `npm run dev` for a watch build while iterating on the library, and `npm run clean` to remove generated files. The demo server starts with `npm run demo:server`, listening on `ws://localhost:8787`—pair it with a static file server to validate handshake and broadcast behavior manually.

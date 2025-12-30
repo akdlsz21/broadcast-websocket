@@ -2,7 +2,7 @@
 
 > Status: MVP
 >
-> Goal: Provide a single-connection, multi-tab/WebView–friendly WebSocket client. Exactly one tab (“leader”) opens a native `WebSocket`; other tabs (“followers”) share that connection via `BroadcastChannel`.
+> Goal: Provide a single-connection, multi-context/WebView–friendly WebSocket client. Exactly one context (“leader”) opens a native `WebSocket`; other contexts (“followers”) share that connection via `BroadcastChannel`.
 
 ---
 
@@ -10,7 +10,7 @@
 
 - Problem: In environments like OBS (multiple web widgets, same origin), each widget opens its own WebSocket to the same chat server — redundant and wasteful.
 - Solution: A BroadcastWebsocket class that:
-  - Elects exactly one leader tab to hold a real `WebSocket` to the server.
+  - Elects exactly one leader context to hold a real `WebSocket` to the server.
   - Followers delegate outbound messages to a `BroadcastChannel` for the leader to forward.
   - The leader rebroadcasts inbound server messages to all followers via `BroadcastChannel`.
 - Constraint: No `SharedWorker`. MVP uses `BroadcastChannel` only (no fallback), and localStorage for simple leader election.
@@ -134,7 +134,7 @@ type Options = {
 ## 9. Testing Strategy
 
 - Unit: Mock `WebSocket` + `BroadcastChannel`.
-- Integration: Playwright multi-tab.
+- Integration: Playwright multi-context (windows/embedded views).
 - Fallback: storage-event path.
 - Stress: bursts, teardown, GC leaks.
 
@@ -164,7 +164,7 @@ type Options = {
 ## 12. Risks
 
 - Broadcast isolation in some embedders.
-- iOS throttling background tabs (heartbeats may delay).
+- iOS throttling background pages/contexts (heartbeats may delay).
 - Storage-event delivery can be laggy.
 - Zero-queue may drop early follower sends.
 
@@ -185,7 +185,7 @@ type Options = {
 - Simple leader election (localStorage)
 - Message forwarding (BroadcastChannel)
 - Zero-queue/no-reconnect MVP
-- Demos (tabs + iframes) and local WS server
+- Demos (multi-context + embedded views) and local WS server
 - Build config (tsup) and docs
 
 ---

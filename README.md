@@ -1,5 +1,5 @@
 
-Single-connection, multi-tab friendly WebSocket wrapper. Exactly one tab (leader) opens a real WebSocket; followers delegate sends and receive broadcasts via BroadcastChannel. The class implements the WebSocket interface (onopen, onmessage, send, close, addEventListener, etc.).
+Single-connection, multi-context WebSocket wrapper. Exactly one context (leader) opens a real WebSocket; other contexts delegate sends and receive broadcasts via BroadcastChannel. The class implements the WebSocket interface (onopen, onmessage, send, close, addEventListener, etc.).
 
 ## Install
 
@@ -24,7 +24,7 @@ bws.onclose = () => console.log('close');
 bws.send(JSON.stringify({ hello: 'world' }));
 ```
 
-Create a `BroadcastWebsocket` in each tab or iframe. The leader opens the socket; followers delegate `send()` via BroadcastChannel and receive messages broadcast by the leader. Zero-queue: sends can drop if the leader isn’t ready.
+Create a `BroadcastWebsocket` in each browsing context (page, window, embedded view). The leader opens the socket; the rest delegate `send()` via BroadcastChannel and receive messages broadcast by the leader. Zero-queue: sends can drop if the leader isn’t ready.
 
 ## Architecture
 
@@ -48,22 +48,29 @@ Local echo demos:
 3. Install the demo server dependency: `npm i ws`
 4. Start the demo server: `npm run demo:server` (listens on `ws://localhost:8787`)
 5. Serve the folder (any static server) and open:
-   - `demo/simple.html` in two tabs
-   - `demo/frames.html` (two iframes in one tab)
+   - `demo/simple.html` in two windows or side-by-side browser contexts
+   - `demo/frames.html` (two embedded clients on one page)
 6. Type messages. The leader connects to the local server; follower sends are delegated via BroadcastChannel; inbound messages are broadcast to followers.
 
-Iframe-based demo (single tab, two iframes):
+React demo (Vite + Tailwind):
+
+1. Build the library once so the local file dependency has `dist/`: `pnpm build`
+2. Install demo deps and link the local package: `pnpm -C demo/react install`
+3. Start the echo server: `pnpm demo:server` (listens on `ws://localhost:8787`)
+4. Run the React demo: `pnpm demo:react` (then open the shown URL; open multiple windows to see leader/follower behavior)
+
+Embedded demo (single page with two client panes):
 
 1. Build: `npm run build`
 2. Start the demo server: `npm run demo:server`
-3. Serve the folder and open `demo/frames.html` (it loads two `pane.html` iframes)
-4. Try sending from either pane; one iframe becomes leader, the other follows.
+3. Serve the folder and open `demo/frames.html` (it loads two `pane.html` client panes)
+4. Try sending from either pane; one becomes leader, the other follows.
 
 Note: Zero-queue — if the leader is not connected yet, follower sends posted via BroadcastChannel may be dropped.
 
 ## Caveats
 
-- Requires `BroadcastChannel` (delegation/broadcast) and `localStorage` (election) to coordinate between tabs.
+- Requires `BroadcastChannel` (delegation/broadcast) and `localStorage` (election) to coordinate between contexts.
 - Browser WebSocket API does not expose native ping/pong. If you need keepalives, implement app-level pings.
 - No buffering/queues: follower sends emitted before leader is ready may be dropped.
 
@@ -71,6 +78,8 @@ Note: Zero-queue — if the leader is not connected yet, follower sends posted v
 
 - Build (ESM + CJS + types): `npm run build`
 - Dry-run publish: `npm publish --dry-run`
+
+Note: Only `dist/` is published (see `package.json#files`); demos and docs stay out of the npm tarball.
 
 Exports
 

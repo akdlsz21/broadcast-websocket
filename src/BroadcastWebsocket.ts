@@ -31,7 +31,6 @@ export class BroadcastWebsocket extends EventTarget implements WebSocket {
 	private id = randomId(8);
 	private ready: ReadyState = this.CONNECTING;
 	private ws?: WebSocket;
-	private opts: Options;
 	private election: Election;
 	private leaderId?: string;
 	private bus: Bus;
@@ -40,7 +39,6 @@ export class BroadcastWebsocket extends EventTarget implements WebSocket {
 	constructor(url: string, options: Options = {}) {
 		super();
 		this.url = url;
-		this.opts = options;
 		this.scope =
 			options.scope ??
 			(() => {
@@ -51,8 +49,6 @@ export class BroadcastWebsocket extends EventTarget implements WebSocket {
 				}
 			})();
 		console.log(`[BWS] id=${this.id} url=${url} scope=${this.scope}`);
-
-		this.opts = options;
 
 		this.election = new Election(this.scope, {
 			id: this.id,
