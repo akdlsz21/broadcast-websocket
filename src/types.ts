@@ -1,5 +1,5 @@
 export interface Options {
-	scope?: string;
+	scope: string;
 	protocols?: string | string[];
 	heartbeatMs?: number;
 	timeoutMs?: number;

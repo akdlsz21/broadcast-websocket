@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import BroadcastWebsocket from 'broadcast-websocket';
 import { cn } from './lib/cn';
 
@@ -34,20 +34,16 @@ function useBroadcastClient(initialUrl = 'ws://localhost:8787', initialScope = '
 	const [url, setUrl] = useState(initialUrl);
 	const [scope, setScope] = useState(initialScope);
 	const [socket, setSocket] = useState<BroadcastWebsocket | null>(null);
-	console.log('🚀 ~ useBroadcastClient ~ socket:', socket);
 	const [status, setStatus] = useState<ReturnType<BroadcastWebsocket['status']>>();
 	const [outbound, setOutbound] = useState('hello');
 	const [logs, setLogs] = useState<LogEntry[]>([]);
-	const logRef = useRef<HTMLDivElement | null>(null);
+
+	// const socketRef = useRef<BroadcastWebsocket | null>(null);
+	// const socket = socketRef.current;
 
 	const isConnected = status?.readyState === BroadcastWebsocket.OPEN;
 
-	useEffect(() => {
-		if (!logRef.current || logs.length === 0) return;
-		logRef.current.scrollTop = 0;
-	}, [logs]);
-
-	const addLog = (entry: Omit<LogEntry, 'id' | 'at'> & { at?: string }) => {
+	const addLog = useCallback((entry: Omit<LogEntry, 'id' | 'at'> & { at?: string }) => {
 		setLogs((prev) => [
 			{
 				id: crypto.randomUUID(),
@@ -56,49 +52,52 @@ function useBroadcastClient(initialUrl = 'ws://localhost:8787', initialScope = '
 			},
 			...prev,
 		]);
-	};
-
-	const addLogRef = useRef(addLog);
-	useEffect(() => {
-		addLogRef.current = addLog;
-	});
+	}, []);
 
 	useEffect(() => {
 		if (!socket) return;
 
 		const updateStatus = () => setStatus(socket.status());
+		updateStatus();
 
 		const handleOpen: EventListener = () => {
 			updateStatus();
-			addLogRef.current?.({ kind: 'system', text: 'Connection opened' });
+			addLog({ kind: 'system', text: 'Connection opened' });
 		};
 
 		const handleClose: EventListener = () => {
 			updateStatus();
-			addLogRef.current?.({ kind: 'system', text: 'Connection closed' });
+			addLog({ kind: 'system', text: 'Connection closed' });
 		};
 
 		const handleError: EventListener = () => {
 			updateStatus();
-			addLogRef.current?.({ kind: 'system', text: 'Connection error' });
+			addLog({ kind: 'system', text: 'Connection error' });
 		};
 
 		const handleMessage: EventListener = (ev) => {
 			const message = ev as MessageEvent;
-			addLogRef.current?.({ kind: 'incoming', text: `${message.data}` });
+			addLog({ kind: 'incoming', text: `${message.data}` });
 		};
+		socket.addEventListener('message');
 
 		const handleSent: EventListener = (ev) => {
 			const detail = (ev as CustomEvent).detail;
-			addLogRef.current?.({ kind: 'sent', text: `${detail}` });
+			addLog({ kind: 'sent', text: `${detail}` });
 		};
+
+		const ws = new WebSocket('ws://localhost:8787');
+		ws.addEventListener('', (ev) => {
+			console.log('[APP] ws message:', ev.data);
+		});
 
 		socket.addEventListener('open', handleOpen);
 		socket.addEventListener('close', handleClose);
 		socket.addEventListener('error', handleError);
 		socket.addEventListener('message', handleMessage);
 		socket.addEventListener('sent', handleSent);
-
+		// const ws = new WebSocket('ws://localhost:8787');
+		// ws.addEventListener("")
 		return () => {
 			socket.removeEventListener('open', handleOpen);
 			socket.removeEventListener('close', handleClose);
@@ -106,29 +105,19 @@ function useBroadcastClient(initialUrl = 'ws://localhost:8787', initialScope = '
 			socket.removeEventListener('message', handleMessage);
 			socket.removeEventListener('sent', handleSent);
 		};
-	}, [socket]);
+	}, [socket, addLog]);
 
 	// useEffect(() => () => socket?.dispose(), [socket]);
 
 	const connect = () => {
-		const trimmedUrl = url.trim();
-		if (!trimmedUrl) return;
-		const nextScope = scope.trim() || scope;
-
-		setSocket((current) => {
-			current?.dispose();
-			const instance = new BroadcastWebsocket(trimmedUrl, { scope: nextScope });
-			addLog({ kind: 'system', text: `Connecting to ${trimmedUrl}` });
-			return instance;
-		});
+		const bws = new BroadcastWebsocket(url.trim(), { scope });
+		setSocket(bws);
+		addLog({ kind: 'system', text: `Connecting to ${url.trim()} with scope "${scope}"` });
 	};
 
 	const disconnect = () => {
-		setSocket((current) => {
-			current?.dispose();
-			return null;
-		});
-		addLog({ kind: 'system', text: 'Disconnected' });
+		socket?.dispose();
+		setSocket(null);
 	};
 
 	const send = () => {
@@ -151,8 +140,6 @@ function useBroadcastClient(initialUrl = 'ws://localhost:8787', initialScope = '
 		  ]
 		: null;
 
-	const clearLogs = () => setLogs([]);
-
 	return {
 		url,
 		setUrl,
@@ -167,29 +154,12 @@ function useBroadcastClient(initialUrl = 'ws://localhost:8787', initialScope = '
 		disconnect,
 		send,
 		logs,
-		clearLogs,
-		logRef,
 	};
 }
 
 function ControlPanel({ id, initialUrl, initialScope, onRemove }: PanelProps) {
-	const {
-		url,
-		setUrl,
-		scope,
-		setScope,
-		status,
-		isConnected,
-		summary,
-		outbound,
-		setOutbound,
-		connect,
-		disconnect,
-		send,
-		logs,
-		clearLogs,
-		logRef,
-	} = useBroadcastClient(initialUrl, initialScope);
+	const { url, setUrl, scope, setScope, status, isConnected, summary, outbound, setOutbound, connect, disconnect, send, logs, clearLogs } =
+		useBroadcastClient(initialUrl, initialScope);
 
 	return (
 		<div className="min-w-0 rounded-lg border border-slate-200 bg-white text-sm shadow-sm overflow-hidden">
@@ -315,18 +285,7 @@ function ControlPanel({ id, initialUrl, initialScope, onRemove }: PanelProps) {
 					</div>
 
 					<div className="space-y-1 min-w-0">
-						<header className="flex items-center justify-between px-2 py-1">
-							<p className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">Activity (newest first)</p>
-							<button
-								type="button"
-								onClick={clearLogs}
-								className="rounded border border-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700 transition hover:border-indigo-400 hover:text-indigo-600"
-							>
-								Clear
-							</button>
-						</header>
 						<div
-							ref={logRef}
 							className="h-72 overflow-auto rounded border border-slate-200 bg-white text-sm min-w-0"
 							role="log"
 							aria-live="polite"

@@ -1,4 +1,8 @@
-export type BusMessage = { kind: 'out' | 'in' | 'sys' | 'sent'; payload?: unknown; type?: 'open' | 'close' | 'error' };
+export interface BusMessage {
+	kind: 'out' | 'in' | 'sys' | 'sent';
+	payload?: unknown;
+	type?: 'open' | 'close' | 'error';
+}
 
 export class Bus {
 	private ch: BroadcastChannel;

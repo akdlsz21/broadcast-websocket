@@ -5,6 +5,22 @@ import { randomId } from './utils';
 
 type ReadyState = 0 | 1 | 2 | 3; // CONNECTING, OPEN, CLOSING, CLOSED
 
+// implement default options constructor parameters
+const DEFAULT_HEARTBEAT_MS = 2000;
+const DEFAULT_TIMEOUT_MS = 5000;
+const DEFAULT_OPTIONS: Options = {
+	scope: 'default',
+	heartbeatMs: DEFAULT_HEARTBEAT_MS,
+	timeoutMs: DEFAULT_TIMEOUT_MS,
+};
+
+interface WebSocketEventMap {
+	close: CloseEvent;
+	error: Event;
+	message: MessageEvent;
+	open: Event;
+}
+
 export class BroadcastWebsocket extends EventTarget implements WebSocket {
 	static readonly CONNECTING = WebSocket.CONNECTING;
 	static readonly OPEN = WebSocket.OPEN;
@@ -19,7 +35,7 @@ export class BroadcastWebsocket extends EventTarget implements WebSocket {
 	readonly url: string;
 	readonly scope: string;
 
-	binaryType: 'blob' | 'arraybuffer' = 'blob';
+	binaryType: WebSocket['binaryType'] = 'blob';
 	protocol = '';
 	extensions = '';
 
@@ -29,25 +45,17 @@ export class BroadcastWebsocket extends EventTarget implements WebSocket {
 	onclose: WebSocket['onclose'] = null;
 
 	private id = randomId(8);
-	private ready: ReadyState = this.CONNECTING;
+	private ready: ReadyState = this.CLOSED;
 	private ws?: WebSocket;
 	private election: Election;
 	private leaderId?: string;
 	private bus: Bus;
 	private unsubBus?: () => void;
 
-	constructor(url: string, options: Options = {}) {
+	constructor(url: string, options: Options = DEFAULT_OPTIONS) {
 		super();
 		this.url = url;
-		this.scope =
-			options.scope ??
-			(() => {
-				try {
-					return new URL(url, typeof location !== 'undefined' ? location.href : 'http://localhost').origin;
-				} catch {
-					return 'default';
-				}
-			})();
+		this.scope = options.scope;
 		console.log(`[BWS] id=${this.id} url=${url} scope=${this.scope}`);
 
 		this.election = new Election(this.scope, {
@@ -55,6 +63,7 @@ export class BroadcastWebsocket extends EventTarget implements WebSocket {
 			heartbeatMs: options.heartbeatMs,
 			timeoutMs: options.timeoutMs,
 		});
+
 		// Setup broadcast channel for message forwarding
 		this.bus = new Bus(`bws:bus:${this.scope}`);
 		this.unsubBus = this.bus.on((msg) => this.onBus(msg));
@@ -132,60 +141,54 @@ export class BroadcastWebsocket extends EventTarget implements WebSocket {
 		this.bus.close();
 	}
 
+	override addEventListener<K extends keyof WebSocketEventMap>(
+		type: K,
+		listener: ((this: WebSocket, ev: WebSocketEventMap[K]) => any) | null,
+		options?: AddEventListenerOptions | boolean
+	): void;
+	override addEventListener(
+		type: string,
+		listener: EventListenerOrEventListenerObject | null,
+		options?: AddEventListenerOptions | boolean
+	): void;
+	override addEventListener(
+		type: string,
+		listener: EventListenerOrEventListenerObject | null,
+		options?: AddEventListenerOptions | boolean
+	): void {
+		super.addEventListener(type, listener as EventListenerOrEventListenerObject, options);
+	}
+
 	// Internals
 	private openSocket() {
 		this.transition(this.CONNECTING);
-		try {
-			const ws = new WebSocket(this.url);
-			ws.binaryType = this.binaryType;
-			this.ws = ws;
-			ws.onopen = () => {
-				this.protocol = ws.protocol;
-				// biome-ignore lint/suspicious/noExplicitAny: extensions prop
-				this.extensions = (ws as any).extensions || '';
-				this.transition(this.OPEN);
-				const ev = new Event('open');
-				this.dispatchEvent(ev);
-				this.onopen?.call(this, ev);
-				this.bus?.post({ kind: 'sys', type: 'open' });
-			};
-			ws.onmessage = (ev) => {
-				const newMessage = new MessageEvent('message', {
-					// biome-ignore lint/suspicious/noExplicitAny: event props
-					data: (ev as any).data,
-					// biome-ignore lint/suspicious/noExplicitAny: event props
-					lastEventId: (ev as any).lastEventId,
-					// biome-ignore lint/suspicious/noExplicitAny: event props
-					origin: (ev as any).origin,
-					// biome-ignore lint/suspicious/noExplicitAny: event props
-					ports: (ev as any).ports,
-					// biome-ignore lint/suspicious/noExplicitAny: event props
-					source: (ev as any).source,
-				});
-				this.dispatchEvent(newMessage);
-				this.onmessage?.call(this, newMessage);
-				this.bus?.post({ kind: 'in', payload: (ev as any).data });
-			};
-			ws.onerror = (ev) => {
-				this.dispatchEvent(ev);
-				this.onerror?.call(this, ev);
-			};
-			ws.onclose = (ev) => {
-				this.transition(this.CLOSED);
-				const newClose = new CloseEvent('close', {
-					code: ev.code,
-					reason: ev.reason,
-					wasClean: ev.wasClean,
-				});
-				this.dispatchEvent(newClose);
-				this.onclose?.call(this, newClose);
-				this.bus?.post({ kind: 'sys', type: 'close' });
-			};
-		} catch (err) {
-			const ev = new Event('error');
+		const ws = new WebSocket(this.url);
+		ws.binaryType = this.binaryType;
+		this.ws = ws;
+		ws.onopen = (ev) => {
+			console.log('[BWS] ws.onopen');
+			this.protocol = ws.protocol;
+			this.extensions = ws.extensions;
+			this.transition(this.OPEN);
+			this.dispatchEvent(ev);
+			this.onopen?.call(this, ev);
+			this.bus?.post({ kind: 'sys', type: 'open' });
+		};
+		ws.onmessage = (ev) => {
+			this.dispatchEvent(ev);
+			this.onmessage?.call(this, ev);
+			this.bus?.post({ kind: 'in', payload: (ev as any).data });
+		};
+		ws.onerror = (ev) => {
 			this.dispatchEvent(ev);
 			this.onerror?.call(this, ev);
-		}
+		};
+		ws.onclose = (ev) => {
+			this.transition(this.CLOSED);
+			this.onclose?.call(this, ev);
+			this.dispatchEvent(ev);
+			this.bus?.post({ kind: 'sys', type: 'close' });
+		};
 	}
 
 	private transition(state: ReadyState) {

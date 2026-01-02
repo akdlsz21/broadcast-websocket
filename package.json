@@ -19,20 +19,22 @@
 		"dist"
 	],
 	"scripts": {
-		"build": "tsup",
-		"build:demo": "tsup demo/client.ts --out-dir demo/dist --format esm --no-dts",
+		"build": "pnpm run clean:dist && tsup",
+		"clean": "rimraf dist demo/dist demo/react/dist demo/react/node_modules/.vite",
+		"clean:all": "rimraf dist demo/dist demo/react/dist node_modules demo/react/node_modules pnpm-lock.yaml && pnpm install",
+		"clean:dist": "rimraf dist",
+
 		"dev": "tsup --watch",
-		"clean": "rm -rf dist",
-		"prepublishOnly": "npm run build",
-		"demo:server": "node scripts/server.js",
-		"demo:react": "pnpm -C demo/react dev",
-		"server": "node scripts/server.js",
-		"start": "node scripts/server.js",
-		"test": "vitest",
-		"test:coverage": "vitest run --coverage",
+		"typecheck": "tsc -p tsconfig.json --noEmit",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"test:cov": "vitest run --coverage",
 		"lint": "biome lint .",
 		"format": "biome format --write .",
-		"check": "biome check --write ."
+		"check": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build",
+		"demo:server": "node scripts/server.js",
+		"demo:react": "pnpm -C demo/react dev",
+		"demo:dev": "concurrently -k -n lib,server,react -c auto \"pnpm dev\" \"pnpm demo:server\" \"pnpm demo:react\""
 	},
 	"keywords": [
 		"websocket",
@@ -59,6 +61,7 @@
 		"@biomejs/biome": "2.3.10",
 		"@types/ws": "^8.18.1",
 		"@vitest/coverage-v8": "^4.0.13",
+		"concurrently": "^9.2.1",
 		"happy-dom": "^20.0.10",
 		"tsup": "^8.5.0",
 		"typescript": "^5.9.2",
