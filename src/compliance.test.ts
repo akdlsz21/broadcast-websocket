@@ -1,8 +1,12 @@
 import { assertType, describe, test } from 'vitest';
-import { BroadcastWebsocket } from './BroadcastWebsocket';
+import type { Role, StatusSnapshot, TransportState } from './types';
+import type { SharedWsTransport } from './shared-ws';
 
-describe('BroadcastWebsocket Static Compliance', () => {
-	test('should be assignable to WebSocket', () => {
-		assertType<WebSocket>(new BroadcastWebsocket('ws://localhost'));
+describe('SharedWsTransport Static Compliance', () => {
+	test('should expose new state surfaces', () => {
+		const client = {} as SharedWsTransport;
+		assertType<Role>(client.role);
+		assertType<TransportState>(client.transportState);
+		assertType<StatusSnapshot>(client.status());
 	});
 });

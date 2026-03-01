@@ -1,29 +1,29 @@
-# BroadcastWebsocket — Package Specification (MVP)
+# Shared WebSocket Transport — Package Specification (MVP)
 
 > Status: MVP
 >
-> Goal: Provide a single-connection, multi-context/WebView–friendly WebSocket client. Exactly one context (“leader”) opens a native `WebSocket`; other contexts (“followers”) share that connection via `BroadcastChannel`.
+> Goal: Provide a single, shared WebSocket transport per {url, scope} across multiple browser contexts (tabs, windows, embedded views). Exactly one context (“leader”) owns the real `WebSocket`; followers attach via `BroadcastChannel` and delegate sends.
 
 ---
 
 ## 1. Overview
 
-- Problem: In environments like OBS (multiple web widgets, same origin), each widget opens its own WebSocket to the same chat server — redundant and wasteful.
-- Solution: A BroadcastWebsocket class that:
-  - Elects exactly one leader context to hold a real `WebSocket` to the server.
-  - Followers delegate outbound messages to a `BroadcastChannel` for the leader to forward.
-  - The leader rebroadcasts inbound server messages to all followers via `BroadcastChannel`.
-- Constraint: No `SharedWorker`. MVP uses `BroadcastChannel` only (no fallback), and localStorage for simple leader election.
+- Problem: In multi-context environments, each context opens its own WebSocket to the same server, wasting connections.
+- Solution: A `SharedWsTransport` class that:
+  - Elects a leader context to hold the real `WebSocket`.
+  - Followers delegate outbound frames to the leader via `BroadcastChannel`.
+  - The leader rebroadcasts inbound messages and state updates to followers.
+- Contract: One physical WebSocket per {url, scope}. Leader tab owns transport. Other tabs attach and delegate send; all tabs receive messages.
 
 ---
 
 ## 2. Design Principles
 
-1. Composition over inheritance: `BroadcastWebsocket` wraps a native `WebSocket` (leader) but is not a subclass. It exposes a WebSocket-compatible surface.
-2. Leader-first correctness: One authoritative WS connection per scope (namespace).
-3. Minimal coupling: Wire protocol-agnostic. Library only routes frames.
-4. Simplicity: No reconnect/backoff; zero-queue (messages may drop if leader not ready).
-5. Portability: Browser-first; no `SharedWorker`. MVP requires `BroadcastChannel` + `localStorage`.
+1. Explicit transport surface: no `WebSocket` interface parity or drop-in claims.
+2. Leader-first correctness: one authoritative socket per scope.
+3. Wire protocol-agnostic: only routes frames.
+4. Simplicity: no reconnect/backoff; zero-queue.
+5. Browser-first: `BroadcastChannel` + `localStorage` (no `SharedWorker`).
 
 ---
 
@@ -32,40 +32,40 @@
 ### 3.1 Constructor
 
 ```ts
-new BroadcastWebsocket(url: string, options?: Options)
+new SharedWsTransport(url: string, options?: Partial<Options>)
 ```
 
 Options (MVP):
 ```ts
 type Options = {
-  scope?: string;             // election namespace; defaults to URL origin
-  protocols?: string | string[]; // WebSocket subprotocols
+  scope?: string;               // defaults to URL origin
+  protocols?: string | string[];
+  heartbeatMs?: number;
+  timeoutMs?: number;
+  debug?: boolean;
+  logger?: (message: string, detail?: Record<string, unknown>) => void;
 };
 ```
 
-### 3.2 WebSocket Compatibility Surface (composite)
+### 3.2 State
 
-- Properties
-  - `readyState`: `0|1|2|3`
-  - `url`: `string`
-  - `binaryType`: `'blob'|'arraybuffer'`
-  - `protocol`: `string`
-  - `extensions`: `string`
-  - `bufferedAmount`: `number`
-- Events
-  - `open`, `message`, `error`, `close`
-- Methods
-  - `send(data)`
-  - `close(code?, reason?)`
-- Additional
-  - `subscribe(handler)`
-  - `on(event, handler)`
-  - `status()`
-  - Note: Class implements `WebSocket` interface (adds `addEventListener`, `removeEventListener`, `dispatchEvent`, `onopen`, etc.)
+- `transportState`: `'connecting' | 'open' | 'closing' | 'closed'`
+- `role`: `'leader' | 'follower'`
 
-### 3.3 Library-Specific Events (MVP)
+### 3.3 Methods
 
-- None beyond WebSocket’s standard events. Followers emit synthetic `open`/`close` and `message` based on bus signals.
+- `send(data)` — throws unless `transportState === 'open'`. Followers delegate to leader.
+- `terminate(code?, reason?)` — request the leader to close the transport.
+- `detach()` / `dispose()` — stop participating (remove listeners, stop election, close bus).
+- `status()` → `{ id, role, leaderId, transportState, url, scope }`
+
+### 3.4 Events
+
+- `transport_open`
+- `transport_close` → `{ code, reason, wasClean }`
+- `transport_error` → `{ error?: unknown }`
+- `message` → `{ data }`
+- `role_change` → `{ role, leaderId }`
 
 ---
 
@@ -73,127 +73,84 @@ type Options = {
 
 ### 4.1 Leader Election
 
-- Implemented via `localStorage` key `bws:leader:<scope>` with timestamp heartbeats.
+- Implemented via `localStorage` key `shared-ws:leader:<scope>` with timestamp heartbeats.
 - Stale leadership expires after timeout; any follower may claim.
-- One leader per scope; followers monitor `storage` events.
+- Followers observe `storage` events for handoff.
 
 ### 4.2 Connection Management
 
-- Only leader opens native `WebSocket`.
+- Only the leader opens the native `WebSocket`.
 - No reconnect/backoff in MVP.
 
 ### 4.3 Message Routing
 
-- Follower → Leader → Server via `BroadcastChannel` (kind: `out`).
-- Server → Leader → Followers broadcast via `BroadcastChannel` (kind: `in`).
-- Followers also receive synthetic `open`/`close` (`sys` events) to mirror leader’s state.
+- Follower → Leader → Server via `BroadcastChannel` (`OUT`).
+- Server → Leader → Followers via `BroadcastChannel` (`IN`).
+- Followers learn leader state through `STATE` updates.
 
-### 4.4 Ordering, Duplication, Flow Control
+### 4.4 Ordering & Flow Control
 
-- Ordering preserved per single socket on the leader.
-- Zero-queue: follower sends before leader is ready may be dropped.
+- Ordering preserved per single leader socket.
+- Zero-queue: `send()` throws unless leader transport is open.
 
-### 4.5 Fallback
+### 4.5 Late Joiners
 
-- None in MVP. Requires `BroadcastChannel`.
-
-### 4.6 Lifecycle
-
-- Track subscriber counts.
-- Optional grace TTL before closing socket.
-- Clean up on disposal.
+- Followers send `JOIN` on startup.
+- Leader replies with `STATE` (current `transportState`, `protocol`, `extensions` if open).
 
 ---
 
-## 5. Security & Auth
+## 5. Bus Protocol (v1)
 
-- MVP does not include auth plumbing. Applications should embed auth in the URL or use server-side session.
+All bus messages are structured-clone-safe and include a version field.
 
----
-
-## 6. Performance
-
-- Messages are relayed directly; no buffering. BroadcastChannel adds small latency (ms-scale).
-
----
-
-## 7. Compatibility
-
-- Needs: `WebSocket`, `crypto.getRandomValues`, `BroadcastChannel`, and `localStorage`.
-- Works: modern browsers and webviews that support these APIs.
-- Caveat: Some embedders (e.g., certain OBS setups) may isolate BroadcastChannel across widgets.
+```ts
+type BusMessage =
+  | { v: 1; kind: 'JOIN'; senderId: string }
+  | { v: 1; kind: 'LEAVE'; senderId: string }
+  | { v: 1; kind: 'STATE'; senderId: string; transportState: TransportState; protocol?: string; extensions?: string; close?: CloseDetail }
+  | { v: 1; kind: 'IN'; senderId: string; data: BusPayload }
+  | { v: 1; kind: 'OUT'; senderId: string; data: BusPayload; reqId?: string }
+  | { v: 1; kind: 'TERMINATE'; senderId: string; code?: number; reason?: string; reqId?: string }
+  | { v: 1; kind: 'ERROR'; senderId: string; message?: string };
+```
 
 ---
 
-## 8. Observability
+## 6. Binary Strategy
 
-- `status()` returns a basic snapshot: id, url, isLeader, leaderId, readyState, bufferedAmount.
-
----
-
-## 9. Testing Strategy
-
-- Unit: Mock `WebSocket` + `BroadcastChannel`.
-- Integration: Playwright multi-context (windows/embedded views).
-- Fallback: storage-event path.
-- Stress: bursts, teardown, GC leaks.
+- Bus payloads are standardized to `string | ArrayBuffer`.
+- Leader WebSocket uses `binaryType = 'arraybuffer'`.
+- If callers send `Blob`, it is converted to `ArrayBuffer` before posting `OUT`.
 
 ---
 
-## 10. Packaging
+## 7. Observability
 
-- Outputs: ESM + CJS + `.d.ts`
-- Bundler: `tsup` / `rollup`
-- `package.json`: exports, types, sideEffects
-- Tooling: ESLint, Prettier
-- License: MIT/Apache-2.0
+- `status()` returns `{ id, role, leaderId, transportState, url, scope }`.
+- Optional debug logging via `debug` + `logger`.
 
 ---
 
-## 11. Documentation to Ship
+## 8. Testing Strategy
 
-- Quick start
-- Behavioral contract
-- Auth recipes
-- Fallback caveats
-- Performance tuning
-- FAQ
+- Unit: stub `WebSocket` and `BroadcastChannel`.
+- Integration: Playwright multi-context (tabs/frames).
+- Scenarios: leader ownership, follower send delegation, inbound broadcast, leader handoff, late joiner `STATE` sync.
 
 ---
 
-## 12. Risks
+## 9. Risks
 
-- Broadcast isolation in some embedders.
-- iOS throttling background pages/contexts (heartbeats may delay).
-- Storage-event delivery can be laggy.
-- Zero-queue may drop early follower sends.
+- BroadcastChannel isolation in some embedders.
+- Background throttling affects heartbeats.
+- Zero-queue behavior drops early sends.
 
 ---
 
-## 13. MVP Acceptance Criteria
+## 10. MVP Acceptance Criteria
 
-- One leader per scope maintains a single native WS connection.
-- Followers delegate `send()` to leader; inbound broadcasts reach all.
+- One leader per scope maintains a single native WebSocket connection.
+- Followers delegate `send()` to leader; inbound messages reach all contexts.
 - Leader loss triggers takeover based on storage timeout.
-- Works with `BroadcastChannel` (no fallback).
-
----
-
-## 14. Deliverables Checklist
-
-- BroadcastWebsocket class (WebSocket-compatible API)
-- Simple leader election (localStorage)
-- Message forwarding (BroadcastChannel)
-- Zero-queue/no-reconnect MVP
-- Demos (multi-context + embedded views) and local WS server
-- Build config (tsup) and docs
-
----
-
-## 15. Notes on WebSocket API Reuse
-
-- Event model: `addEventListener`/`removeEventListener`, `onopen`, `onmessage`, etc.
-- `bufferedAmount`: leader reflects native; followers reflect 0.
-- `binaryType`: leader meaningful; followers mirror interface only.
-- `protocol`/`extensions`: rebroadcast from leader.
-- Deviation: follower `close()` does not close leader socket.
+- Late joiners receive current `STATE` and begin receiving messages.

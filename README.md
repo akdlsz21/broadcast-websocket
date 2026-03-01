@@ -1,5 +1,6 @@
+Shared WebSocket Transport. Exactly one context (leader) opens a real WebSocket; other contexts attach via BroadcastChannel and delegate sends, while all contexts receive inbound messages.
 
-Single-connection, multi-context WebSocket wrapper. Exactly one context (leader) opens a real WebSocket; other contexts delegate sends and receive broadcasts via BroadcastChannel. The class implements the WebSocket interface (onopen, onmessage, send, close, addEventListener, etc.).
+One physical WebSocket per {url, scope}. Leader tab owns transport. Other tabs attach and delegate send; all tabs receive messages.
 
 ## Install
 
@@ -13,31 +14,63 @@ Then import from `dist/index.js` (ESM) or `dist/index.cjs` (CJS).
 ## Quick Start
 
 ```ts
-import BroadcastWebsocket from 'broadcast-websocket';
+import SharedWsTransport from 'broadcast-websocket';
 
-const bws = new BroadcastWebsocket('wss://example/ws');
+const transport = new SharedWsTransport('wss://example/ws');
 
-bws.onopen = () => console.log('open');
-bws.onmessage = (e) => console.log('message', e.data);
-bws.onclose = () => console.log('close');
+transport.addEventListener('transport_open', () => console.log('open'));
+transport.addEventListener('message', (event) => {
+	const detail = event as CustomEvent<{ data: string | ArrayBuffer }>;
+	console.log('message', detail.detail.data);
+});
+transport.addEventListener('transport_close', (event) => {
+	const detail = event as CustomEvent<{ code: number; reason: string; wasClean: boolean }>;
+	console.log('close', detail.detail);
+});
 
-bws.send(JSON.stringify({ hello: 'world' }));
+transport.send(JSON.stringify({ hello: 'world' }));
 ```
 
-Create a `BroadcastWebsocket` in each browsing context (page, window, embedded view). The leader opens the socket; the rest delegate `send()` via BroadcastChannel and receive messages broadcast by the leader. Zero-queue: sends can drop if the leader isn’t ready.
+Create a `SharedWsTransport` in each browsing context (page, window, embedded view). The leader opens the socket; the rest delegate `send()` via BroadcastChannel and receive messages broadcast by the leader. `send()` throws unless `transportState === 'open'`.
+
+## API
+
+Methods:
+
+- `send(data)`
+- `terminate(code?, reason?)`
+- `detach()` / `dispose()`
+- `status()` → `{ id, role, leaderId, transportState, url, scope }`
+
+State:
+
+- `transportState`: `'connecting' | 'open' | 'closing' | 'closed'`
+- `role`: `'leader' | 'follower'`
+
+Events:
+
+- `transport_open`
+- `transport_close` → `{ code, reason, wasClean }`
+- `transport_error` → `{ error?: unknown }`
+- `message` → `{ data }`
+- `role_change` → `{ role, leaderId }`
+
+## Options
+
+```ts
+type Options = {
+	scope?: string; // defaults to URL origin
+	protocols?: string | string[];
+	heartbeatMs?: number;
+	timeoutMs?: number;
+	debug?: boolean;
+	logger?: (message: string, detail?: Record<string, unknown>) => void;
+};
+```
 
 ## Architecture
 
 <img width="1056" height="719" alt="image" src="https://github.com/user-attachments/assets/067afba6-a9fc-4918-aeb8-da8bc6e8384a" />
-
-## Options
-
-- `scope?: string` — Leader election namespace (defaults to URL origin)
-- `protocols?: string | string[]` — WebSocket subprotocols
-
-## Events
-
-- WebSocket-like: `open`, `message`, `error`, `close`
 
 ## Demos
 
@@ -66,13 +99,11 @@ Embedded demo (single page with two client panes):
 3. Serve the folder and open `demo/frames.html` (it loads two `pane.html` client panes)
 4. Try sending from either pane; one becomes leader, the other follows.
 
-Note: Zero-queue — if the leader is not connected yet, follower sends posted via BroadcastChannel may be dropped.
-
 ## Caveats
 
 - Requires `BroadcastChannel` (delegation/broadcast) and `localStorage` (election) to coordinate between contexts.
 - Browser WebSocket API does not expose native ping/pong. If you need keepalives, implement app-level pings.
-- No buffering/queues: follower sends emitted before leader is ready may be dropped.
+- No buffering/queues: `send()` throws unless the leader transport is open.
 
 ## Build & Publish
 

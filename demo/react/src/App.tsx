@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import BroadcastWebsocket from 'broadcast-websocket';
+import SharedWsTransport from 'broadcast-websocket';
+import type { BusPayload, TransportCloseDetail, TransportState } from 'broadcast-websocket';
 import { cn } from './lib/cn';
 
 type LogEntry = {
@@ -9,19 +10,26 @@ type LogEntry = {
 	at: string;
 };
 
-const READY_LABELS: Record<number, string> = {
-	2: 'Closing',
-	3: 'Closed',
+const STATE_LABELS: Record<TransportState, string> = {
+	connecting: 'Connecting',
+	open: 'Open',
+	closing: 'Closing',
+	closed: 'Closed',
 };
 
-const badgeColor = (readyState: number | undefined) => {
-	if (readyState === BroadcastWebsocket.OPEN) return 'bg-emerald-100 text-emerald-800 ring-emerald-200';
-	if (readyState === BroadcastWebsocket.CONNECTING) return 'bg-amber-100 text-amber-800 ring-amber-200';
-	if (readyState === BroadcastWebsocket.CLOSING) return 'bg-orange-100 text-orange-800 ring-orange-200';
+const badgeColor = (state: TransportState | undefined) => {
+	if (state === 'open') return 'bg-emerald-100 text-emerald-800 ring-emerald-200';
+	if (state === 'connecting') return 'bg-amber-100 text-amber-800 ring-amber-200';
+	if (state === 'closing') return 'bg-orange-100 text-orange-800 ring-orange-200';
 	return 'bg-slate-100 text-slate-700 ring-slate-200';
 };
 
 const formatTime = (date = new Date()) => date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+const formatPayload = (payload: BusPayload) => {
+	if (typeof payload === 'string') return payload;
+	return new TextDecoder().decode(payload);
+};
 
 type PanelProps = {
 	id: string;
@@ -33,15 +41,12 @@ type PanelProps = {
 function useBroadcastClient(initialUrl = 'ws://localhost:8787', initialScope = 'scope-1') {
 	const [url, setUrl] = useState(initialUrl);
 	const [scope, setScope] = useState(initialScope);
-	const [socket, setSocket] = useState<BroadcastWebsocket | null>(null);
-	const [status, setStatus] = useState<ReturnType<BroadcastWebsocket['status']>>();
+	const [socket, setSocket] = useState<SharedWsTransport | null>(null);
+	const [status, setStatus] = useState<ReturnType<SharedWsTransport['status']>>();
 	const [outbound, setOutbound] = useState('hello');
 	const [logs, setLogs] = useState<LogEntry[]>([]);
 
-	// const socketRef = useRef<BroadcastWebsocket | null>(null);
-	// const socket = socketRef.current;
-
-	const isConnected = status?.readyState === BroadcastWebsocket.OPEN;
+	const isConnected = status?.transportState === 'open';
 
 	const addLog = useCallback((entry: Omit<LogEntry, 'id' | 'at'> & { at?: string }) => {
 		setLogs((prev) => [
@@ -62,61 +67,52 @@ function useBroadcastClient(initialUrl = 'ws://localhost:8787', initialScope = '
 
 		const handleOpen: EventListener = () => {
 			updateStatus();
-			addLog({ kind: 'system', text: 'Connection opened' });
+			addLog({ kind: 'system', text: 'Transport open' });
 		};
 
-		const handleClose: EventListener = () => {
+		const handleClose: EventListener = (event) => {
 			updateStatus();
-			addLog({ kind: 'system', text: 'Connection closed' });
+			const detail = (event as CustomEvent<TransportCloseDetail>).detail;
+			addLog({ kind: 'system', text: `Transport closed (${detail.code})` });
 		};
 
 		const handleError: EventListener = () => {
 			updateStatus();
-			addLog({ kind: 'system', text: 'Connection error' });
+			addLog({ kind: 'system', text: 'Transport error' });
 		};
 
-		const handleMessage: EventListener = (ev) => {
-			const message = ev as MessageEvent;
-			addLog({ kind: 'incoming', text: `${message.data}` });
-		};
-		socket.addEventListener('message');
-
-		const handleSent: EventListener = (ev) => {
-			const detail = (ev as CustomEvent).detail;
-			addLog({ kind: 'sent', text: `${detail}` });
+		const handleMessage: EventListener = (event) => {
+			const detail = (event as CustomEvent<{ data: BusPayload }>).detail;
+			addLog({ kind: 'incoming', text: formatPayload(detail.data) });
 		};
 
-		const ws = new WebSocket('ws://localhost:8787');
-		ws.addEventListener('', (ev) => {
-			console.log('[APP] ws message:', ev.data);
-		});
+		const handleRoleChange: EventListener = () => {
+			updateStatus();
+		};
 
-		socket.addEventListener('open', handleOpen);
-		socket.addEventListener('close', handleClose);
-		socket.addEventListener('error', handleError);
+		socket.addEventListener('transport_open', handleOpen);
+		socket.addEventListener('transport_close', handleClose);
+		socket.addEventListener('transport_error', handleError);
 		socket.addEventListener('message', handleMessage);
-		socket.addEventListener('sent', handleSent);
-		// const ws = new WebSocket('ws://localhost:8787');
-		// ws.addEventListener("")
+		socket.addEventListener('role_change', handleRoleChange);
+
 		return () => {
-			socket.removeEventListener('open', handleOpen);
-			socket.removeEventListener('close', handleClose);
-			socket.removeEventListener('error', handleError);
+			socket.removeEventListener('transport_open', handleOpen);
+			socket.removeEventListener('transport_close', handleClose);
+			socket.removeEventListener('transport_error', handleError);
 			socket.removeEventListener('message', handleMessage);
-			socket.removeEventListener('sent', handleSent);
+			socket.removeEventListener('role_change', handleRoleChange);
 		};
 	}, [socket, addLog]);
 
-	// useEffect(() => () => socket?.dispose(), [socket]);
-
 	const connect = () => {
-		const bws = new BroadcastWebsocket(url.trim(), { scope });
-		setSocket(bws);
+		const shared = new SharedWsTransport(url.trim(), { scope });
+		setSocket(shared);
 		addLog({ kind: 'system', text: `Connecting to ${url.trim()} with scope "${scope}"` });
 	};
 
 	const disconnect = () => {
-		socket?.dispose();
+		socket?.detach();
 		setSocket(null);
 	};
 
@@ -125,6 +121,7 @@ function useBroadcastClient(initialUrl = 'ws://localhost:8787', initialScope = '
 		try {
 			const payload = JSON.stringify({ message: outbound });
 			socket.send(payload);
+			addLog({ kind: 'sent', text: payload });
 		} catch (err) {
 			console.warn('Send failed:', err);
 			addLog({ kind: 'system', text: 'Send failed. Check console for details.' });
@@ -133,10 +130,10 @@ function useBroadcastClient(initialUrl = 'ws://localhost:8787', initialScope = '
 
 	const summary = status
 		? [
-				{ label: 'Role', value: status.isLeader ? 'Leader' : 'Follower' },
+				{ label: 'Role', value: status.role === 'leader' ? 'Leader' : 'Follower' },
 				{ label: 'Leader ID', value: status.leaderId ?? '—' },
-				{ label: 'Socket ID', value: status.id },
-				{ label: 'Buffered', value: `${status.bufferedAmount} bytes` },
+				{ label: 'Client ID', value: status.id },
+				{ label: 'Scope', value: status.scope },
 		  ]
 		: null;
 
@@ -158,7 +155,7 @@ function useBroadcastClient(initialUrl = 'ws://localhost:8787', initialScope = '
 }
 
 function ControlPanel({ id, initialUrl, initialScope, onRemove }: PanelProps) {
-	const { url, setUrl, scope, setScope, status, isConnected, summary, outbound, setOutbound, connect, disconnect, send, logs, clearLogs } =
+	const { url, setUrl, scope, setScope, status, isConnected, summary, outbound, setOutbound, connect, disconnect, send, logs } =
 		useBroadcastClient(initialUrl, initialScope);
 
 	return (
@@ -209,11 +206,11 @@ function ControlPanel({ id, initialUrl, initialScope, onRemove }: PanelProps) {
 							<div
 								className={cn(
 									'inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ring-1 ring-inset',
-									badgeColor(status?.readyState)
+									badgeColor(status?.transportState)
 								)}
 							>
 								<span className="inline-block h-2 w-2 rounded-full bg-current" />
-								{READY_LABELS[status?.readyState ?? BroadcastWebsocket.CLOSED]}
+								{STATE_LABELS[status?.transportState ?? 'closed']}
 							</div>
 							<div className="flex items-center gap-2 text-sm">
 								<button
@@ -232,13 +229,13 @@ function ControlPanel({ id, initialUrl, initialScope, onRemove }: PanelProps) {
 								>
 									Disconnect
 								</button>
-								<span className="text-xs text-slate-500">{isConnected ? 'Connected' : 'Connect once per scope.'}</span>
+								<span className="text-xs text-slate-500">{isConnected ? 'Ready' : 'Connect once per scope.'}</span>
 							</div>
 						</div>
 						<dl className="grid grid-cols-2 gap-2">
 							<div>
-								<dt className="text-[11px] uppercase tracking-wide text-slate-500">Ready</dt>
-								<dd className="font-medium">{READY_LABELS[status?.readyState ?? BroadcastWebsocket.CLOSED]}</dd>
+								<dt className="text-[11px] uppercase tracking-wide text-slate-500">State</dt>
+								<dd className="font-medium">{STATE_LABELS[status?.transportState ?? 'closed']}</dd>
 							</div>
 							{summary?.map((item: { label: string; value: string }) => (
 								<div key={item.label}>
@@ -250,7 +247,7 @@ function ControlPanel({ id, initialUrl, initialScope, onRemove }: PanelProps) {
 						<p className="mt-2 text-xs text-slate-600">
 							{!status
 								? 'Not connected yet.'
-								: status.isLeader
+								: status.role === 'leader'
 								? 'Leader: connects to the server.'
 								: 'Follower: delegates sends to the leader.'}
 						</p>
@@ -337,7 +334,7 @@ function App() {
 		<div className="min-h-screen bg-slate-50 text-slate-900">
 			<div className="mx-auto max-w-6xl px-3 py-5 space-y-3">
 				<div className="flex items-center justify-between">
-					<h1 className="text-lg font-semibold text-slate-900">Broadcast Websocket Panels</h1>
+					<h1 className="text-lg font-semibold text-slate-900">Shared WebSocket Transport Panels</h1>
 					<button
 						type="button"
 						onClick={addPanel}

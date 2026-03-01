@@ -1,4 +1,5 @@
-import BWS, { type BroadcastWebsocket } from '../src/index';
+import { SharedWsTransport } from '../src/index';
+import type { BusPayload, StatusSnapshot, TransportCloseDetail } from '../src/types';
 
 function getEl<T extends HTMLElement = HTMLElement>(id: string): T | null {
 	return document.getElementById(id) as T | null;
@@ -20,77 +21,78 @@ function appendLog($log: HTMLElement, line: string, kind: LogKind = 'system') {
 	$log.scrollTop = $log.scrollHeight;
 }
 
+function formatPayload(payload: BusPayload) {
+	if (typeof payload === 'string') return payload;
+	return new TextDecoder().decode(payload);
+}
+
 (() => {
 	const params = new URLSearchParams(location.search);
 	const name = params.get('name') || 'Widget';
 	const url = params.get('url') || 'ws://localhost:8787';
 
-	// Optional pane label
 	const $name = getEl('name');
 	if ($name) $name.textContent = `Widget: ${name}`;
 
-	const bws = new BWS(url, {
+	const transport = new SharedWsTransport(url, {
 		heartbeatMs: 120,
 	});
 
 	const $log = mustEl('log');
-	const $meta = getEl('meta'); // simple.html
-	const $leader = getEl('leader'); // pane.html
-	const $state = getEl('state'); // pane.html
-	const $role = getEl('role'); // pane.html banner
+	const $meta = getEl('meta');
+	const $leader = getEl('leader');
+	const $state = getEl('state');
+	const $role = getEl('role');
 
 	const $send = mustEl<HTMLButtonElement>('send');
 	const $text = mustEl<HTMLInputElement>('text');
 
 	function render() {
-		const s = (bws as BroadcastWebsocket).status();
+		const s: StatusSnapshot = transport.status();
 		if ($meta) {
-			$meta.textContent = `leader=${s.isLeader ? 'yes' : 'no'} leaderId=${s.leaderId || '—'} state=${s.readyState} buffered=${
-				s.bufferedAmount
-			}`;
+			$meta.textContent = `role=${s.role} leaderId=${s.leaderId || '—'} state=${s.transportState}`;
 		}
-		if ($leader) $leader.textContent = s.isLeader ? 'yes' : `no (leaderId=${s.leaderId || '—'})`;
-		if ($state) $state.textContent = String(s.readyState);
-		if ($role) $role.textContent = s.isLeader ? 'Leader' : 'Follower';
-		document.body.classList.toggle('role-leader', s.isLeader);
-		document.body.classList.toggle('role-follower', !s.isLeader);
+		if ($leader) $leader.textContent = s.role === 'leader' ? 'yes' : `no (leaderId=${s.leaderId || '—'})`;
+		if ($state) $state.textContent = s.transportState;
+		if ($role) $role.textContent = s.role === 'leader' ? 'Leader' : 'Follower';
+		document.body.classList.toggle('role-leader', s.role === 'leader');
+		document.body.classList.toggle('role-follower', s.role !== 'leader');
 	}
 
-	// Wire WebSocket-like handlers
-	bws.onopen = () => {
-		appendLog($log, `open (url=${url})`, 'system');
+	transport.addEventListener('transport_open', () => {
+		appendLog($log, `transport_open (url=${url})`, 'system');
 		render();
-	};
-	bws.onmessage = (e) => {
-		const status = (bws as BroadcastWebsocket).status();
-		appendLog($log, 'message ' + String(e.data), status.isLeader ? 'message-direct' : 'message-delegated');
-	};
-	bws.onerror = () => appendLog($log, 'error', 'system');
-	bws.onclose = () => {
-		appendLog($log, 'close', 'system');
+	});
+
+	transport.addEventListener('message', (event) => {
+		const detail = (event as CustomEvent<{ data: BusPayload }>).detail;
+		const status = transport.status();
+		appendLog($log, `message ${formatPayload(detail.data)}`, status.role === 'leader' ? 'message-direct' : 'message-delegated');
+	});
+
+	transport.addEventListener('transport_error', () => appendLog($log, 'transport_error', 'system'));
+
+	transport.addEventListener('transport_close', (event) => {
+		const detail = (event as CustomEvent<TransportCloseDetail>).detail;
+		appendLog($log, `transport_close code=${detail.code} reason=${detail.reason}`, 'system');
 		render();
-	};
-	bws.addEventListener('sent', (e) => {
-		const detail = (e as CustomEvent).detail;
-		// Only log if we didn't send it ourselves (avoid duplicate logs, though demo logic below logs send-direct/delegated manually)
-		// Actually, standard practice for "sent" event is to notify that *someone* sent it.
-		// The demo's doSend() logs its own send. We should probably distinguish or just log everything.
-		// Let's log it as a distinct event to verify it works.
-		appendLog($log, 'global-sent ' + String(detail), 'system');
+	});
+
+	transport.addEventListener('role_change', () => {
+		render();
 	});
 
 	function doSend() {
 		const raw = $text.value;
-		if (!raw || !raw.trim()) return; // ignore empty
-		// Send text frames (string). If JSON is typed, pass it through as-is.
+		if (!raw || !raw.trim()) return;
 		const payload = raw;
-		const status = (bws as BroadcastWebsocket).status();
+		const status = transport.status();
 		try {
-			bws.send(payload);
-			appendLog($log, 'send ' + payload, status.isLeader ? 'send-direct' : 'send-delegated');
+			transport.send(payload);
+			appendLog($log, `send ${payload}`, status.role === 'leader' ? 'send-direct' : 'send-delegated');
 			$text.value = '';
 		} catch (err) {
-			appendLog($log, 'send-error ' + String(err), 'system');
+			appendLog($log, `send-error ${String(err)}`, 'system');
 		}
 	}
 
@@ -102,6 +104,5 @@ function appendLog($log: HTMLElement, line: string, kind: LogKind = 'system') {
 		}
 	});
 
-	// Initial render tick
 	render();
 })();

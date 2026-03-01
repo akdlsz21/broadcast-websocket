@@ -6,6 +6,13 @@ export interface ElectionEvents {
 	change: { leaderId?: string };
 }
 
+interface ElectionOptions {
+	id?: string;
+	heartbeatMs?: number;
+	timeoutMs?: number;
+	keyPrefix?: string;
+}
+
 export class Election extends EventTarget {
 	readonly scope: string;
 	readonly id: string;
@@ -16,12 +23,14 @@ export class Election extends EventTarget {
 	private timer?: any;
 	private _leaderId?: string;
 	private storageHandler?: (e: StorageEvent) => void;
+	private beforeUnloadHandler?: () => void;
 
-	constructor(scope: string, opts?: { id?: string; heartbeatMs?: number; timeoutMs?: number }) {
+	constructor(scope: string, opts?: ElectionOptions) {
 		super();
 		this.scope = scope;
 		this.id = opts?.id ?? randomId(8);
-		this.key = `bws:leader:${scope}`;
+		const prefix = opts?.keyPrefix ?? 'shared-ws:leader:';
+		this.key = `${prefix}${scope}`;
 		this.heartbeatMs = opts?.heartbeatMs ?? 3000;
 		this.timeoutMs = opts?.timeoutMs ?? 9000;
 	}
@@ -34,6 +43,9 @@ export class Election extends EventTarget {
 	}
 
 	start() {
+		if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+			throw new Error('Election requires window.localStorage');
+		}
 		// observe other tabs
 		this.storageHandler = (e: StorageEvent) => {
 			if (e.key !== this.key) return;
@@ -52,18 +64,25 @@ export class Election extends EventTarget {
 		}, this.heartbeatMs);
 
 		// best effort: release on unload
-		window.addEventListener('beforeunload', () => {
+		this.beforeUnloadHandler = () => {
 			if (this.isLeader) {
 				try {
 					localStorage.removeItem(this.key);
 				} catch {}
 			}
-		});
+		};
+		window.addEventListener('beforeunload', this.beforeUnloadHandler);
 	}
 
 	stop() {
 		if (this.timer) clearInterval(this.timer);
 		if (this.storageHandler) window.removeEventListener('storage', this.storageHandler);
+		if (this.beforeUnloadHandler) window.removeEventListener('beforeunload', this.beforeUnloadHandler);
+		if (this.isLeader) {
+			try {
+				localStorage.removeItem(this.key);
+			} catch {}
+		}
 	}
 
 	private readLeader() {

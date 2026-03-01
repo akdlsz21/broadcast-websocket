@@ -1,10 +1,4 @@
-export interface BusMessage {
-	kind: 'out' | 'in' | 'sys' | 'sent';
-	payload?: unknown;
-	type?: 'open' | 'close' | 'error';
-}
-
-export class Bus {
+export class Bus<T> {
 	private ch: BroadcastChannel;
 	constructor(name: string) {
 		if (typeof BroadcastChannel === 'undefined') {
@@ -12,11 +6,11 @@ export class Bus {
 		}
 		this.ch = new BroadcastChannel(name);
 	}
-	post(msg: BusMessage) {
+	post(msg: T) {
 		this.ch.postMessage(msg);
 	}
-	on(handler: (msg: BusMessage) => void): () => void {
-		const cb = (ev: MessageEvent) => handler(ev.data as BusMessage);
+	on(handler: (msg: T) => void): () => void {
+		const cb = (ev: MessageEvent) => handler(ev.data as T);
 		this.ch.addEventListener('message', cb);
 		return () => this.ch.removeEventListener('message', cb);
 	}

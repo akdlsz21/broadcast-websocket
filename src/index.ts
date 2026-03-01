@@ -1,2 +1,2 @@
-export { BroadcastWebsocket as default, BroadcastWebsocket } from './BroadcastWebsocket';
+export { SharedWsTransport as default, SharedWsTransport } from './shared-ws';
 export type * from './types';
